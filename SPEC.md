@@ -57,10 +57,15 @@ Each row contains `rowSize` bytes, where:
 ### 3.1 Parameters
 
 ```
-K:       Number of original rows (power of 2, ≤ 2^16)
-N:       Number of parity rows (power of 2, ≤ 2^16, typically N = K)
+K:       Number of original rows (must be a power of 2, ≤ 2^16)
+N:       Number of parity rows (K+N must be a power of 2, ≤ 2^16)
 rowSize: Size of each row in bytes (multiple of 64)
 ```
+
+**Parameter Constraints:**
+- K must be a power of 2 (ensures the first K leaves form a perfect binary subtree)
+- K + N must be a power of 2 (ensures the total tree is perfect with no padding)
+- This allows configurations like: K=4/N=4, K=8/N=8, K=4/N=12, K=16/N=48, etc.
 
 ### 3.2 Data Extension
 
@@ -161,8 +166,9 @@ rowSize: Size of each row in bytes (multiple of 64)
      ```
    - **Generate YLeftProof (sibling subtree roots)**
      
-     When K and N are powers of 2, the first K leaves form a complete binary subtree. 
-     YLeftProof contains the roots of sibling subtrees needed to compute the full tree root.
+     Since K is a power of 2 and K+N is a power of 2, the first K leaves form a complete 
+     binary subtree. YLeftProof contains the sibling nodes needed to compute from 
+     the K-leaf subtree root up to the full tree root.
      
      **Example with K=4, N=4 (8 total leaves):**
      ```
@@ -182,6 +188,16 @@ rowSize: Size of each row in bytes (multiple of 64)
            (yOrig)       RLCs
      ```
      
+     **Example with K=4, N=12 (16 total leaves):**
+     ```
+                              rlcRoot
+                            /          \
+                       Root_0-7       Root_8-15  ← Include in YLeftProof[1]
+                      /        \      
+                 Root_0-3   Root_4-7  ← Include in YLeftProof[0]
+                 (K orig)
+     ```
+     
      **Algorithm:**
      ```
      proof.yLeftProof = []
@@ -189,14 +205,14 @@ rowSize: Size of each row in bytes (multiple of 64)
      
      while currentRange.size < totalLeaves:
          siblingStart = currentRange.end
-         siblingEnd = siblingStart + currentRange.size
+         siblingEnd = min(siblingStart + currentRange.size, totalLeaves)
          siblingRoot = MerkleRoot(rlcLeaves[siblingStart:siblingEnd])
          proof.yLeftProof.append(siblingRoot)
          currentRange = [0, siblingEnd)  // Expand range to include sibling
      ```
      
      For K=4, N=4: YLeftProof = [Root_4-7] (one sibling)
-     For K=2, N=6: YLeftProof = [Root_2-3, Root_4-7] (two siblings)
+     For K=4, N=12: YLeftProof = [Root_4-7, Root_8-15] (two siblings)
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
