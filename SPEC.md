@@ -157,13 +157,46 @@ rowSize: Size of each row in bytes (multiple of 64)
    - **Include Original RLC Results**
      ```
      for j in 0..K:
-         proof.yOrig[j] = Serialize(y[j])  // 16 bytes each
+         proof.yOrig[j] = y[j]  // Original K RLC values
      ```
-   - **Generate Left-Subtree Proof**
+   - **Generate YLeftProof (sibling subtree roots)**
+     
+     When K and N are powers of 2, the first K leaves form a complete binary subtree. 
+     YLeftProof contains the roots of sibling subtrees needed to compute the full tree root.
+     
+     **Example with K=4, N=4 (8 total leaves):**
      ```
-     leftSubtreeRoot = MerkleTree(rlcLeaves[0..K]).root()
-     proof.yLeftProof = rlcTree.generateProofFromSubtree(leftSubtreeRoot)
+                        rlcRoot
+                      /          \
+                    /              \
+                  /                  \
+              Root_0-3            Root_4-7  ← Include in YLeftProof
+              /      \            /      \
+           /    \      \        /    \      \
+        Root   Root   Root   Root   Root   Root
+        0-1    2-3    4-5    6-7    
+        / \    / \    / \    / \
+       y0 y1  y2 y3  y4 y5  y6 y7
+       └─────┬─────┘ └─────┬─────┘
+         K original    N extended
+           (yOrig)       RLCs
      ```
+     
+     **Algorithm:**
+     ```
+     proof.yLeftProof = []
+     currentRange = [0, K)  // Start with K original RLCs
+     
+     while currentRange.size < totalLeaves:
+         siblingStart = currentRange.end
+         siblingEnd = siblingStart + currentRange.size
+         siblingRoot = MerkleRoot(rlcLeaves[siblingStart:siblingEnd])
+         proof.yLeftProof.append(siblingRoot)
+         currentRange = [0, siblingEnd)  // Expand range to include sibling
+     ```
+     
+     For K=4, N=4: YLeftProof = [Root_4-7] (one sibling)
+     For K=2, N=6: YLeftProof = [Root_2-3, Root_4-7] (two siblings)
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
@@ -177,7 +210,7 @@ rowSize: Size of each row in bytes (multiple of 64)
 - `rowProof`: Merkle proof for row (log2(K+N) × 32 bytes)
 - For extended rows (i ≥ K):
   - `yOrig`: Original RLC results (K × 16 bytes)
-  - `yLeftProof`: Proof from left-subtree to rlcRoot (log2(K+N) × 32 bytes)
+  - `yLeftProof`: Sibling subtree roots to compute from K-leaf subtree to full tree (≤ log2(K+N) × 32 bytes)
 - For original rows (i < K):
   - `rlcProof`: Merkle proof for RLC result (log2(K+N) × 32 bytes)
 
@@ -212,18 +245,23 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 4. **For Extended Rows (proof.index ≥ K):**
    ```
-   // Verify left-subtree
-   leftSubtreeRoot = MerkleTree(proof.yOrig).root()
-   assert MerkleVerify(leftSubtreeRoot, proof.yLeftProof, commitment.rlcRoot)
-   
-   // Verify extension consistency
+   // Extend the K original RLC values to get all K+N values
    y_extended = LeopardExtend(proof.yOrig, K, N)
+   
+   // Verify the computed RLC matches the extended value
    assert y_i == y_extended[proof.index]
    
-   // Verify complete RLC tree
-   rlcLeaves = Serialize(y_extended)
-   recomputedRlcRoot = MerkleTree(rlcLeaves).root()
-   assert recomputedRlcRoot == commitment.rlcRoot
+   // Compute Merkle root of K original RLCs
+   origLeaves = Serialize(proof.yOrig)
+   currentRoot = MerkleRoot(origLeaves)
+   
+   // Use YLeftProof to compute full rlcRoot
+   // Each proof element is a sibling subtree root
+   for siblingRoot in proof.yLeftProof:
+       currentRoot = SHA256(currentRoot || siblingRoot)
+   
+   // Verify against commitment
+   assert currentRoot == commitment.rlcRoot
    ```
 
 5. **Verify Commitment Integrity**
