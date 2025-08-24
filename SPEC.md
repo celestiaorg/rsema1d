@@ -98,10 +98,9 @@ rowSize: Size of each row in bytes (multiple of 64)
 2. **Derive RLC Coefficients**
    ```
    seed = SHA256(rowRoot)
-   numChunks = rowSize / 64
-   for c in 0..numChunks:
-       for j in 0..32:  // 32 symbols per 64-byte chunk
-           coeffs[c][j] = HashToGF128(SHA256(seed || c || j))
+   numSymbols = rowSize / 2  // Each GF16 symbol is 2 bytes
+   for i in 0..numSymbols:
+       coeffs[i] = HashToGF128(SHA256(seed || i))
    ```
    Where HashToGF128 converts a 32-byte hash to a GF128 element by:
    - Taking bytes 0-15 as 8 little-endian uint16 values
@@ -116,7 +115,8 @@ rowSize: Size of each row in bytes (multiple of 64)
            chunk = row[i][c*64..(c+1)*64]
            symbols = ExtractSymbols(chunk)  // See Appendix A.1
            for j in 0..32:
-               rlc[i] += symbols[j] * coeffs[c][j]  // GF16 × GF128
+               symbolIndex = c*32 + j  // Overall symbol index in the row
+               rlc[i] += symbols[j] * coeffs[symbolIndex]  // GF16 × GF128
    ```
 
 4. **Extend RLC Results**
@@ -260,7 +260,8 @@ rowSize: Size of each row in bytes (multiple of 64)
        chunk = proof.row[c*64..(c+1)*64]
        symbols = ExtractSymbols(chunk)  // See Appendix A.1
        for j in 0..32:
-           rlcI += symbols[j] * coeffs[c][j]
+           symbolIndex = c*32 + j
+           rlcI += symbols[j] * coeffs[symbolIndex]
    ```
 
 3. **For Original Rows (proof.index < K):**
