@@ -31,8 +31,9 @@
   - A.2 [Visual Representation of Leopard Format](#a2-visual-representation-of-leopard-format)
 - [Appendix B: Serialization Formats](#appendix-b-serialization-formats)
   - B.1 [GF128 Serialization](#b1-gf128-serialization)
-  - B.2 [Merkle Tree Construction](#b2-merkle-tree-construction)
-  - B.3 [Proof Serialization](#b3-proof-serialization)
+  - B.2 [GF128 Packing for Leopard Extension](#b2-gf128-packing-for-leopard-extension)
+  - B.3 [Merkle Tree Construction](#b3-merkle-tree-construction)
+  - B.4 [Proof Serialization](#b4-proof-serialization)
 - [Appendix C: Bulk Data Read Paths](#appendix-c-bulk-data-read-paths)
   - C.1 [Single Row Reading](#c1-single-row-reading-random-sampling)
   - C.2 [Full Original Data Reading](#c2-full-original-data-reading-bulk-download)
@@ -159,9 +160,17 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 4. **Extend RLC Results**
    ```
-   // Treat rlc[0..K] as K symbols in GF(2^128)
-   // Apply RS encoding to generate N parity symbols
-   rlcExtended = LeopardExtend(rlc[0..K], K, N)
+   // Each GF128 value is 8 GF16 symbols
+   // Pack into Leopard format: 64-byte shards with first 8 symbols as RLC, 24 zeros
+   for i in 0..K:
+       shard[i] = PackGF128ToLeopard(rlc[i])  // See Appendix B.2
+   
+   // Apply RS encoding to generate N parity shards
+   extendedShards = LeopardExtend(shard[0..K], K, N)
+   
+   // Unpack GF128 values from extended shards
+   for i in 0..(K+N):
+       rlcExtended[i] = UnpackGF128FromLeopard(extendedShards[i])
    ```
 
 5. **Compute RLC Root**
@@ -418,12 +427,40 @@ bytes[2:4]   = limb[1] (little-endian uint16)
 bytes[14:16] = limb[7] (little-endian uint16)
 ```
 
-### B.2 Merkle Tree Construction
+### B.2 GF128 Packing for Leopard Extension
+When extending RLC results using Reed-Solomon, GF128 values must be packed into Leopard's interleaved format:
+
+**PackGF128ToLeopard**: Converts GF128 to 64-byte Leopard shard
+```
+Input: GF128 value (8 GF16 symbols)
+Output: 64-byte Leopard-formatted shard
+
+// Place 8 GF16 symbols in first 8 positions, zero-pad remaining 24
+for i in 0..8:
+    shard[i] = symbol[i] & 0xFF         // Low byte
+    shard[32+i] = symbol[i] >> 8        // High byte
+for i in 8..32:
+    shard[i] = 0                        // Zero padding (low bytes)
+    shard[32+i] = 0                     // Zero padding (high bytes)
+```
+
+**UnpackGF128FromLeopard**: Extracts GF128 from 64-byte Leopard shard
+```
+Input: 64-byte Leopard-formatted shard
+Output: GF128 value (8 GF16 symbols)
+
+for i in 0..8:
+    symbol[i] = (shard[32+i] << 8) | shard[i]
+```
+
+This packing ensures proper Reed-Solomon encoding of RLC values while respecting Leopard's interleaved symbol format.
+
+### B.3 Merkle Tree Construction
 - Binary tree with power-of-2 leaves
 - Internal nodes: SHA256(left || right)
 - Leaf nodes: Direct hash values (no double-hashing)
 
-### B.3 Proof Serialization
+### B.4 Proof Serialization
 Recommended format (implementers may choose alternatives):
 
 For original rows (index < K):
