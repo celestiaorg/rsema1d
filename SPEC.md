@@ -1,5 +1,43 @@
 # RSEMA1D Codec Specification v1.0
 
+## Table of Contents
+
+1. [Overview](#1-overview)
+2. [Mathematical Foundations](#2-mathematical-foundations)
+   - 2.1 [Field Definitions](#21-field-definitions)
+   - 2.2 [Data Layout](#22-data-layout)
+3. [Codec Specification](#3-codec-specification)
+   - 3.1 [Parameters](#31-parameters)
+   - 3.2 [Data Extension](#32-data-extension)
+   - 3.3 [Commitment Generation](#33-commitment-generation)
+   - 3.4 [Proof Generation](#34-proof-generation)
+   - 3.5 [Proof Verification](#35-proof-verification)
+4. [Security Considerations](#4-security-considerations)
+   - 4.1 [Soundness](#41-soundness)
+   - 4.2 [Proximity Gap](#42-proximity-gap)
+   - 4.3 [Commitment Binding](#43-commitment-binding)
+5. [Implementation Requirements](#5-implementation-requirements)
+   - 5.1 [Cryptographic Primitives](#51-cryptographic-primitives)
+   - 5.2 [Arithmetic Operations](#52-arithmetic-operations)
+   - 5.3 [Memory Requirements](#53-memory-requirements)
+6. [Test Vectors](#6-test-vectors)
+   - 6.1 [Small Example](#61-small-example-k4-n4-rowsize64)
+   - 6.2 [Verification Test Cases](#62-verification-test-cases)
+7. [References](#7-references)
+
+**Appendices:**
+- [Appendix A: Leopard-Specific Operations](#appendix-a-leopard-specific-operations)
+  - A.1 [Symbol Extraction from Leopard Share](#a1-symbol-extraction-from-leopard-share)
+  - A.2 [Visual Representation of Leopard Format](#a2-visual-representation-of-leopard-format)
+- [Appendix B: Serialization Formats](#appendix-b-serialization-formats)
+  - B.1 [GF128 Serialization](#b1-gf128-serialization)
+  - B.2 [Merkle Tree Construction](#b2-merkle-tree-construction)
+  - B.3 [Proof Serialization](#b3-proof-serialization)
+- [Appendix C: Bulk Data Read Paths](#appendix-c-bulk-data-read-paths)
+  - C.1 [Single Row Reading](#c1-single-row-reading-random-sampling)
+  - C.2 [Full Original Data Reading](#c2-full-original-data-reading-bulk-download)
+  - C.3 [Left Subtree Proof Functions](#c3-left-subtree-proof-functions)
+
 ## 1. Overview
 
 RSEMA1D (Reed-Solomon Evans-Mohnblatt-Angeris 1D) is a data availability codec that provides efficient commitment, proof generation, and verification for vertically-extended data matrices. The codec uses random linear combinations (RLCs) to ensure soundness of the encoding.
