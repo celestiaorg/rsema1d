@@ -128,10 +128,8 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 1. **Compute Row Root**
    ```
-   for i in 0..(K+N):
-       rowHashes[i] = SHA256(row[i])
-   rowTree = MerkleTree(rowHashes)
-   rowRoot = rowTree.root()
+   rowTree = MerkleTree(rows[0..K+N])  // Build tree directly over row data
+   rowRoot = rowTree.root()            // Tree construction adds leaf/inner prefixes
    ```
 
 2. **Derive RLC Coefficients**
@@ -188,7 +186,7 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 **Output**: 
 - `commitment`: 32-byte commitment
-- `rowRoot`: 32-byte Merkle root of row hashes
+- `rowRoot`: 32-byte Merkle root of rows (tree built directly over row data)
 - `rlcRoot`: 32-byte Merkle root of RLC results
 
 ### 3.4 Proof Generation
@@ -240,8 +238,7 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 1. **Compute Row Root from Proof**
    ```
-   rowHash = SHA256(proof.row)
-   rowRoot = ComputeRootFromProof(rowHash, proof.index, proof.rowProof)
+   rowRoot = ComputeRootFromProof(proof.row, proof.index, proof.rowProof)
    ```
 
 2. **Recompute RLC**
@@ -310,7 +307,7 @@ The commitment is binding due to:
 
 ### 5.1 Cryptographic Primitives
 - SHA-256 hash function
-- Binary Merkle tree implementation
+- Binary Merkle tree implementation (RFC 6962 compatible with leaf/inner prefixes)
 - Leopard Reed-Solomon codec (or compatible)
 
 ### 5.2 Arithmetic Operations
@@ -456,9 +453,10 @@ for i in 0..8:
 This packing ensures proper Reed-Solomon encoding of RLC values while respecting Leopard's interleaved symbol format.
 
 ### B.3 Merkle Tree Construction
-- Binary tree with power-of-2 leaves
-- Internal nodes: SHA256(left || right)
-- Leaf nodes: Direct hash values (no double-hashing)
+- Binary tree with power-of-2 leaves (RFC 6962 compatible)
+- Leaf nodes: SHA256(0x00 || leafData) - prefix byte ensures domain separation
+- Internal nodes: SHA256(0x01 || left || right) - different prefix for internal nodes
+- This format matches RFC 6962 and is compatible with CometBFT/Celestia-core
 
 ### B.4 Proof Serialization
 Recommended format (implementers may choose alternatives):
@@ -509,7 +507,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    ```
 
 2. **Generate Row Original Subtree Proof**
-   Since K is a power of 2, the first K row hashes form a complete binary subtree.
+   Since K is a power of 2, the first K rows form a complete binary subtree when building the merkle tree.
    The proof contains sibling subtree roots needed to verify that the K-row subtree
    is part of the full (K+N)-row tree.
    ```
@@ -533,9 +531,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 **Process**:
 1. **Compute Row Original Subtree Root**
    ```
-   for i in 0..K:
-       rowHashes[i] = SHA256(bulkProof.rowsOrig[i])
-   rowOrigRoot = MerkleRoot(rowHashes[0..K])
+   rowOrigRoot = MerkleRoot(bulkProof.rowsOrig[0..K])  // Build tree directly over rows
    ```
 
 2. **Verify Row Original Subtree is Part of Full Tree**
