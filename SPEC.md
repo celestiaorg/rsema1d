@@ -167,62 +167,8 @@ rowSize: Size of each row in bytes (multiple of 64)
      for j in 0..K:
          proof.rlcOrig[j] = rlc[j]  // Original K RLC values
      ```
-   - **Generate rlcOrigProof (sibling subtree roots)**
-     
-     Since K is a power of 2 and K+N is a power of 2, the first K leaves form a complete 
-     binary subtree. rlcOrigProof contains the sibling nodes needed to compute from 
-     the K-leaf subtree root up to the full tree root.
-     
-     **Example with K=4, N=4 (8 total leaves):**
-     ```
-                            rlcRoot
-                          /          \
-                        /              \
-                      /                  \
-                  Root_0-3            Root_4-7  ← Include in rlcOrigProof
-                  /      \            /      \
-                /          \        /          \
-            Root_0-1    Root_2-3  Root_4-5    Root_6-7
-              / \        / \        / \        / \
-            rlc0 rlc1  rlc2 rlc3  rlc4 rlc5  rlc6 rlc7
-            └────────┬────────┘  └────────┬────────┘
-               K original           N extended
-                (rlcOrig)             (parity)
-     ```
-     
-     **Example with K=4, N=12 (16 total leaves):**
-     ```
-                                  rlcRoot
-                                /          \
-                              /              \
-                        Root_0-7            Root_8-15  ← Include in rlcOrigProof[1]
-                        /      \            
-                      /          \          
-                  Root_0-3      Root_4-7  ← Include in rlcOrigProof[0]
-                  /      \      
-                /          \    
-            Root_0-1    Root_2-3
-              / \        / \    
-            rlc0 rlc1  rlc2 rlc3
-            └────────┬────────┘
-               K original
-                (rlcOrig)
-     ```
-     
-     **Algorithm:**
-     ```
-     proof.rlcOrigProof = []
-     currentSize = K
-     
-     while currentSize < totalLeaves:
-         siblingRoot = MerkleRoot(rlcLeaves[currentSize:currentSize*2])
-         proof.rlcOrigProof.append(siblingRoot)
-         currentSize = currentSize * 2
-     ```
-     
-     Examples:
-     - K=4, N=4: rlcOrigProof = [Root_4-7] (one sibling)
-     - K=4, N=12: rlcOrigProof = [Root_4-7, Root_8-15] (two siblings)
+   - **Note**: No additional proof needed. The verifier will extend these K values 
+     to K+N values and compute the rlcRoot directly.
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
@@ -236,7 +182,6 @@ rowSize: Size of each row in bytes (multiple of 64)
 - `rowProof`: Merkle proof for row (log2(K+N) × 32 bytes)
 - For extended rows (i ≥ K):
   - `rlcOrig`: Original RLC results (K × 16 bytes)
-  - `rlcOrigProof`: Sibling subtree roots to compute from K-leaf subtree to full tree (≤ log2(K+N) × 32 bytes)
 - For original rows (i < K):
   - `rlcProof`: Merkle proof for RLC result (log2(K+N) × 32 bytes)
 
@@ -279,16 +224,10 @@ rowSize: Size of each row in bytes (multiple of 64)
    // Verify the computed RLC matches the extended value
    assert rlcI == rlcExtended[proof.index]
    
-   // Compute Merkle root of K original RLCs
-   origLeaves = Serialize(proof.rlcOrig)
-   origRoot = MerkleRoot(origLeaves)
-   
-   // Use rlcOrigProof to compute full rlcRoot
-   currentRoot = origRoot
-   for siblingRoot in proof.rlcOrigProof:
-       currentRoot = SHA256(currentRoot || siblingRoot)
-   
-   rlcRoot = currentRoot
+   // Build the complete RLC Merkle tree from all K+N values
+   rlcLeaves = Serialize(rlcExtended)  // All K+N values
+   rlcTree = MerkleTree(rlcLeaves)
+   rlcRoot = rlcTree.root()
    ```
 
 5. **Verify Final Commitment**
@@ -335,9 +274,9 @@ The commitment is binding due to:
 ### 5.3 Memory Requirements
 - Prover: O(K × rowSize) for data storage
 - Verifier for original rows: O(rowSize) for row data + O(log(K+N)) for proofs
-- Verifier for extended rows: O(K × 16) for RLC results + O(rowSize) for row data
-- Proof size for original rows: O(log(K+N) × 32) bytes
-- Proof size for extended rows: O(K × 16 + log(K+N) × 32) bytes
+- Verifier for extended rows: O(K × 16) for RLC results + O(rowSize) for row data + O(K+N × 16) temporary for tree building
+- Proof size for original rows: rowSize + O(log(K+N) × 32) bytes
+- Proof size for extended rows: rowSize + K × 16 + O(log(K+N) × 32) bytes
 
 ## 6. Test Vectors
 
@@ -448,6 +387,19 @@ bytes[14:16] = limb[7] (little-endian uint16)
 
 ### B.3 Proof Serialization
 Recommended format (implementers may choose alternatives):
+
+For original rows (index < K):
+```
+[4 bytes]    index (uint32, little-endian)
+[4 bytes]    rowSize (uint32, little-endian)
+[rowSize]    row data
+[4 bytes]    rowProofLen (uint32, little-endian)
+[variable]   rowProof (concatenated 32-byte hashes)
+[4 bytes]    rlcProofLen (uint32, little-endian)
+[variable]   rlcProof (concatenated 32-byte hashes)
+```
+
+For extended rows (index ≥ K):
 ```
 [4 bytes]    index (uint32, little-endian)
 [4 bytes]    rowSize (uint32, little-endian)
@@ -455,6 +407,207 @@ Recommended format (implementers may choose alternatives):
 [4 bytes]    rowProofLen (uint32, little-endian)
 [variable]   rowProof (concatenated 32-byte hashes)
 [K × 16]     rlcOrig (serialized GF128 values)
-[4 bytes]    rlcOrigProofLen (uint32, little-endian)
-[variable]   rlcOrigProof (concatenated 32-byte hashes)
+```
+
+## Appendix C: Bulk Data Read Paths
+
+The codec supports two primary read patterns for committed data:
+
+### C.1 Single Row Reading (Random Sampling)
+This is the standard proof generation and verification as described in sections 3.4 and 3.5. Used for:
+- Light client sampling
+- Individual row verification
+- Spot checking data availability
+
+Each row is proven independently with its own Merkle proofs.
+
+### C.2 Full Original Data Reading (Bulk Download)
+For applications that need to retrieve all K original rows (e.g., rollups downloading the entire block), a more efficient approach uses subtree proofs:
+
+#### C.2.1 Bulk Proof Generation
+**Input**: Extended data, commitment
+
+**Process**:
+1. **Include All Original Row Data**
+   ```
+   bulkProof.rowsOrig = rows[0..K]  // All K original rows
+   ```
+
+2. **Generate Row Original Subtree Proof**
+   Since K is a power of 2, the first K row hashes form a complete binary subtree.
+   The proof contains sibling subtree roots needed to verify that the K-row subtree
+   is part of the full (K+N)-row tree.
+   ```
+   bulkProof.rowOrigProof = GenerateLeftSubtreeProof(rowTree, K)
+   ```
+
+3. **Generate RLC Original Subtree Proof**
+   Similarly, the first K RLC values form a complete binary subtree.
+   ```
+   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcTree, K)
+   ```
+
+**Output**: Bulk proof containing:
+- `rowsOrig`: All K original rows (K × rowSize bytes)
+- `rowOrigProof`: Sibling roots to prove K-row subtree is in (K+N)-row tree (≤ log2(K+N) × 32 bytes)
+- `rlcOrigProof`: Sibling roots to prove K-RLC subtree is in (K+N)-RLC tree (≤ log2(K+N) × 32 bytes)
+
+#### C.2.2 Bulk Proof Verification
+**Input**: Bulk proof, commitment, parameters
+
+**Process**:
+1. **Compute Row Original Subtree Root**
+   ```
+   for i in 0..K:
+       rowHashes[i] = SHA256(bulkProof.rowsOrig[i])
+   rowOrigRoot = MerkleRoot(rowHashes[0..K])
+   ```
+
+2. **Verify Row Original Subtree is Part of Full Tree**
+   ```
+   rowRoot = ComputeRootFromLeftSubtreeProof(rowOrigRoot, bulkProof.rowOrigProof)
+   ```
+
+3. **Derive Coefficients and Compute All Original RLCs**
+   ```
+   coeffs = DeriveCoefficients(rowRoot, params)
+   for i in 0..K:
+       rlcOrig[i] = ComputeRLC(bulkProof.rowsOrig[i], coeffs)
+   ```
+
+4. **Compute RLC Original Subtree Root**
+   ```
+   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
+   rlcOrigRoot = MerkleRoot(rlcLeaves)
+   ```
+
+5. **Verify RLC Original Subtree is Part of Full Tree**
+   ```
+   rlcRoot = ComputeRootFromLeftSubtreeProof(rlcOrigRoot, bulkProof.rlcOrigProof)
+   ```
+
+6. **Verify Final Commitment**
+   ```
+   computedCommitment = SHA256(rowRoot || rlcRoot)
+   assert computedCommitment == commitment
+   ```
+
+**Output**: Accept/Reject + all K original rows if accepted
+
+#### C.2.3 Efficiency Comparison
+
+**Single Row Proofs (K times):**
+- Data transmitted: K × rowSize (row data) + K × 2 × log2(K+N) × 32 (Merkle proofs)
+- Verification ops: K × (2 × log2(K+N) hash operations + 1 RLC computation)
+
+**Bulk Proof (once):**
+- Data transmitted: K × rowSize (row data) + 2 × log2(N) × 32 (subtree proofs)
+- Verification ops: 2K hashes (tree building) + K RLC computations + 2 × log2(N) hash operations
+
+For typical parameters (K=32768, N=32768):
+- Single proofs: ~32768 × 32 × 32 = 32MB of proof data
+- Bulk proof: ~512 bytes of proof data only
+
+The bulk approach is significantly more efficient for downloading all original data, which is common for rollup operators and full nodes.
+
+### C.3 Left Subtree Proof Functions
+
+These functions support the bulk data reading operations described above.
+
+#### C.3.1 GenerateLeftSubtreeProof
+Generates a proof that the leftmost K leaves (where K is a power of 2) are part of a larger tree with K+N leaves.
+
+**Input**: 
+- `tree`: Merkle tree with K+N leaves
+- `K`: Number of leaves in left subtree (must be power of 2)
+
+**Algorithm**:
+```
+GenerateLeftSubtreeProof(tree, K):
+    proof = []
+    currentSize = K
+    
+    while currentSize < totalLeaves:
+        // Compute root of sibling subtree [currentSize, currentSize*2)
+        siblingRoot = MerkleRoot(leaves[currentSize:currentSize*2])
+        proof.append(siblingRoot)
+        currentSize = currentSize * 2
+    
+    return proof
+```
+
+**Example 1: K=4, N=4 (8 total leaves)**
+```
+                     Root_0-7
+                    /        \
+                   /          \
+             Root_0-3        Root_4-7  ← Include in proof
+             /      \        /      \
+           /          \    /          \
+       Root_0-1  Root_2-3 Root_4-5  Root_6-7
+        /   \     /   \    /   \     /   \
+      L0    L1  L2    L3  L4   L5   L6   L7
+      └──────┬──────┘    └──────┬──────┘
+         K original         N extended
+```
+Returns: [Root_4-7]
+
+**Example 2: K=4, N=12 (16 total leaves)**
+```
+                              Root_0-15
+                            /            \
+                          /                \
+                    Root_0-7              Root_8-15  ← Include in proof[1]
+                   /        \              /        \
+                 /            \          /            \
+           Root_0-3        Root_4-7    Root_8-11   Root_12-15
+                           ↑ Include in proof[0]
+           /      \        /      \
+         /          \    /          \
+     Root_0-1  Root_2-3 Root_4-5  Root_6-7
+      /   \     /   \
+    L0    L1  L2    L3
+    └──────┬──────┘
+       K original
+```
+Returns: [Root_4-7, Root_8-15]
+
+#### C.3.2 ComputeRootFromLeftSubtreeProof
+Computes the full tree root given a left subtree root and sibling subtree roots.
+
+**Input**:
+- `leftSubtreeRoot`: Root of the leftmost K leaves
+- `siblingRoots`: Array of sibling subtree roots from GenerateLeftSubtreeProof
+
+**Algorithm**:
+```
+ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
+    currentRoot = leftSubtreeRoot
+    
+    for siblingRoot in siblingRoots:
+        // Left subtree is always on the left, sibling on the right
+        currentRoot = SHA256(currentRoot || siblingRoot)
+    
+    return currentRoot
+```
+
+**Visual Example (K=4, N=12)**:
+```
+Initial state:
+    leftSubtreeRoot = Root_0-3
+    siblingRoots = [Root_4-7, Root_8-15]
+
+Step 1: Combine Root_0-3 with Root_4-7
+                Root_0-7
+               /        \
+         Root_0-3    Root_4-7
+         (given)     (proof[0])
+
+Step 2: Combine Root_0-7 with Root_8-15
+                Root_0-15
+               /          \
+         Root_0-7      Root_8-15
+         (step 1)      (proof[1])
+
+Final: Root_0-15
 ```
