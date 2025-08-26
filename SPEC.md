@@ -21,8 +21,9 @@
    - 5.2 [Arithmetic Operations](#52-arithmetic-operations)
    - 5.3 [Memory Requirements](#53-memory-requirements)
 6. [Test Vectors](#6-test-vectors)
-   - 6.1 [Small Example](#61-small-example-k4-n4-rowsize64)
-   - 6.2 [Verification Test Cases](#62-verification-test-cases)
+   - 6.1 [Test Vector 1: K=4, N=4, rowSize=64](#61-test-vector-1-k4-n4-rowsize64)
+   - 6.2 [Test Vector 2: K=3, N=9, rowSize=256](#62-test-vector-2-k3-n9-rowsize256)
+   - 6.3 [Verification Test Cases](#63-verification-test-cases)
 7. [References](#7-references)
 
 **Appendices:**
