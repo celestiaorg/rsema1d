@@ -96,15 +96,26 @@ Each row contains `rowSize` bytes, where:
 ### 3.1 Parameters
 
 ```
-K:       Number of original rows (must be a power of 2, ≤ 2^16)
-N:       Number of parity rows (K+N must be a power of 2, ≤ 2^16)
+K:       Number of original rows (1 ≤ K ≤ 2^16)
+N:       Number of parity rows (1 ≤ N ≤ 2^16, K+N ≤ 2^16)
 rowSize: Size of each row in bytes (multiple of 64)
 ```
 
 **Parameter Constraints:**
-- K must be a power of 2 (ensures the first K leaves form a perfect binary subtree)
-- K + N must be a power of 2 (ensures the total tree is perfect with no padding)
-- This allows configurations like: K=4/N=4, K=8/N=8, K=4/N=12, K=16/N=48, etc.
+- K can be any positive integer up to 2^16
+- N can be any positive integer such that K+N ≤ 2^16
+- rowSize must be at least 64 and a multiple of 64 (Leopard constraint)
+
+**Tree Padding Strategy:**
+For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
+- Let K_padded = next power of 2 ≥ K
+- Let total_padded = next power of 2 ≥ (K_padded + N)
+- Padding consists of zero-filled rows of size rowSize
+- Tree layout:
+  - Positions [0, K): Original data rows
+  - Positions [K, K_padded): Zero padding
+  - Positions [K_padded, K_padded+N): Extended/parity rows
+  - Positions [K_padded+N, total_padded): Zero padding
 
 ### 3.2 Data Extension
 
@@ -122,14 +133,58 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 ### 3.3 Commitment Generation
 
+**Helper Functions:**
+```
+// BuildPaddedRowArray creates a padded array for row tree construction
+BuildPaddedRowArray(rows, K, N):
+    K_padded = nextPowerOfTwo(K)
+    total_padded = nextPowerOfTwo(K_padded + N)
+    paddedRows = new array[total_padded]
+    zeroRow = new byte[rowSize]
+    
+    paddedRows[0..K] = rows[0..K]                          // Original rows
+    paddedRows[K..K_padded] = zeroRow                      // Padding
+    paddedRows[K_padded..K_padded+N] = rows[K..K+N]       // Extended rows
+    paddedRows[K_padded+N..total_padded] = zeroRow        // Padding
+    
+    return paddedRows
+
+// BuildPaddedRLCArray creates a padded array for RLC tree construction
+BuildPaddedRLCArray(rlcExtended, K, N):
+    K_padded = nextPowerOfTwo(K)
+    total_padded = nextPowerOfTwo(K_padded + N)
+    paddedRLCLeaves = new array[total_padded]
+    zeroRLC = new byte[16]
+    
+    for i in 0..K:
+        paddedRLCLeaves[i] = Serialize(rlcExtended[i])
+    for i in K..K_padded:
+        paddedRLCLeaves[i] = zeroRLC
+    for i in K_padded..K_padded+N:
+        paddedRLCLeaves[i] = Serialize(rlcExtended[K+(i-K_padded)])
+    for i in K_padded+N..total_padded:
+        paddedRLCLeaves[i] = zeroRLC
+        
+    return paddedRLCLeaves
+
+// MapIndexToTreePosition maps actual index to padded tree position
+MapIndexToTreePosition(index, K):
+    K_padded = nextPowerOfTwo(K)
+    if index < K:
+        return index
+    else:
+        return K_padded + (index - K)
+```
+
 **Input**: Extended data (K+N rows)
 
 **Process**:
 
 1. **Compute Row Root**
    ```
-   rowTree = MerkleTree(rows[0..K+N])  // Build tree directly over row data
-   rowRoot = rowTree.root()            // Tree construction adds leaf/inner prefixes
+   paddedRows = BuildPaddedRowArray(rows, K, N)
+   rowTree = MerkleTree(paddedRows)  
+   rowRoot = rowTree.root()
    ```
 
 2. **Derive RLC Coefficients**
@@ -173,9 +228,8 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 5. **Compute RLC Root**
    ```
-   for i in 0..(K+N):
-       rlcLeaves[i] = Serialize(rlcExtended[i])  // 16 bytes each
-   rlcTree = MerkleTree(rlcLeaves)
+   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
+   rlcTree = MerkleTree(paddedRLCLeaves)
    rlcRoot = rlcTree.root()
    ```
 
@@ -203,7 +257,8 @@ rowSize: Size of each row in bytes (multiple of 64)
 
 2. **Generate Row Merkle Proof**
    ```
-   proof.rowProof = rowTree.generateProof(i)
+   treeIndex = MapIndexToTreePosition(i, K)
+   proof.rowProof = rowTree.generateProof(treeIndex)
    ```
 
 3. **For Extended Rows (i ≥ K):**
@@ -218,7 +273,7 @@ rowSize: Size of each row in bytes (multiple of 64)
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
      ```
-     proof.rlcProof = rlcTree.generateProof(i)
+     proof.rlcProof = rlcTree.generateProof(i)  // Same position as in padded tree
      ```
 
 **Output**: Proof containing:
@@ -255,7 +310,8 @@ This optimization can significantly reduce proof sizes, especially for extended 
 
 1. **Compute Row Root from Proof**
    ```
-   rowRoot = ComputeRootFromProof(proof.row, proof.index, proof.rowProof)
+   treeIndex = MapIndexToTreePosition(proof.index, K)
+   rowRoot = ComputeRootFromProof(proof.row, treeIndex, proof.rowProof)
    ```
 
 2. **Recompute RLC**
@@ -285,9 +341,9 @@ This optimization can significantly reduce proof sizes, especially for extended 
    // Verify the computed RLC matches the extended value
    assert rlcI == rlcExtended[proof.index]
    
-   // Build the complete RLC Merkle tree from all K+N values
-   rlcLeaves = Serialize(rlcExtended)  // All K+N values
-   rlcTree = MerkleTree(rlcLeaves)
+   // Build the padded RLC tree
+   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
+   rlcTree = MerkleTree(paddedRLCLeaves)
    rlcRoot = rlcTree.root()
    ```
 
@@ -603,26 +659,29 @@ The bulk approach is significantly more efficient for downloading all original d
 These functions support the bulk data reading operations described above.
 
 #### C.3.1 GenerateLeftSubtreeProof
-Generates a proof that the leftmost K leaves (where K is a power of 2) are part of a larger tree with K+N leaves.
+Generates a proof that the leftmost K leaves are part of a larger padded tree.
 
 **Input**: 
-- `tree`: Merkle tree with K+N leaves
-- `K`: Number of leaves in left subtree (must be power of 2)
+- `tree`: Padded Merkle tree with total_padded leaves
+- `K`: Number of actual data leaves in left subtree (can be arbitrary)
 
 **Algorithm**:
 ```
 GenerateLeftSubtreeProof(tree, K):
+    K_padded = nextPowerOfTwo(K)
     proof = []
-    currentSize = K
+    currentSize = K_padded  // Start from padded K
     
     while currentSize < totalLeaves:
-        // Compute root of sibling subtree [currentSize, currentSize*2)
-        siblingRoot = MerkleRoot(leaves[currentSize:currentSize*2])
+        // Compute root of sibling subtree
+        siblingRoot = tree.getSubtreeRoot(currentSize, currentSize*2)
         proof.append(siblingRoot)
         currentSize = currentSize * 2
     
     return proof
 ```
+
+Note: Since the tree is padded to K_padded, the proof starts from the K_padded subtree boundary.
 
 **Example 1: K=4, N=4 (8 total leaves)**
 ```
