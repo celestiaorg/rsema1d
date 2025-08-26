@@ -230,6 +230,23 @@ rowSize: Size of each row in bytes (multiple of 64)
 - For original rows (i < K):
   - `rlcProof`: Merkle proof for RLC result (log2(K+N) × 32 bytes)
 
+**Implementor's Note on Proof Optimization:**
+
+In practice, proof transmission can be optimized based on the verification context:
+
+1. **When verifier already has `rlcOrig`** (e.g., data availability sampling where verifier downloads `rlcOrig` once and verifies multiple rows):
+   - For extended rows: No need to send `rlcOrig` in each proof
+   - For original rows: No need to send `rlcProof` (verifier can compute `rlcRoot` from their copy of `rlcOrig`)
+   - Only send: `index`, `row`, and `rowProof`
+
+2. **When verifier doesn't have `rlcOrig`** (e.g., single original row read by a rollup):
+   - In practice, this case only applies to original rows (rollups read original data, not parity)
+   - For original rows: Must include `rlcProof` 
+   - Send: `index`, `row`, `rowProof`, and `rlcProof`
+   - Note: Extended rows cannot be verified without `rlcOrig`, but original data readers don't need them anyway
+
+This optimization can significantly reduce proof sizes, especially for extended rows where `rlcOrig` is K × 16 bytes. Implementations should provide separate proof generation/verification functions for these two contexts to maximize efficiency.
+
 ### 3.5 Proof Verification
 
 **Input**: Proof, commitment (32 bytes), parameters
