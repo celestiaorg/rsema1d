@@ -397,26 +397,36 @@ The commitment is binding due to:
 
 ## 6. Test Vectors
 
-### 6.1 Small Example (K=4, N=4, rowSize=64)
+### 6.1 Test Vector 1: K=4, N=4, rowSize=64
 
-**TODO**: Fill in expected outputs after implementation
-
-Input data (4 rows × 64 bytes):
+**Input data** (4 rows × 64 bytes each, all zeros except last byte):
 ```
-Row 0: 0x0000000000000000...0000000000000001
-Row 1: 0x0000000000000000...0000000000000002
-Row 2: 0x0000000000000000...0000000000000003
-Row 3: 0x0000000000000000...0000000000000004
+Row 0: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001
+Row 1: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002
+Row 2: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003
+Row 3: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004
 ```
 
-Expected outputs:
+**Expected commitment**:
 ```
-rowRoot:    [32 bytes - dependent on exact Merkle tree implementation]
-rlcRoot:    [32 bytes - dependent on coefficient derivation]
-commitment: [32 bytes - SHA256 of concatenated roots]
+0xa71c1e91387fc13003c3bb3891ab1dbe3fd00ddec2223064a5542f1e70ead50d
 ```
 
-### 6.2 Verification Test Cases
+### 6.2 Test Vector 2: K=3, N=9, rowSize=256
+
+**Input data** (3 rows × 256 bytes each, all zeros except last byte):
+```
+Row 0: 0x00...(255 zero bytes)...01
+Row 1: 0x00...(255 zero bytes)...02
+Row 2: 0x00...(255 zero bytes)...03
+```
+
+**Expected commitment**:
+```
+0x4df24d6b09fe07061a6835405c86eca4176c447592e487d4317f667452c05775
+```
+
+### 6.3 Verification Test Cases
 
 1. **Valid Original Row**: Proof for row 0 should verify
 2. **Valid Parity Row**: Proof for row 4 should verify
