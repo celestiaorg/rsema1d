@@ -97,13 +97,12 @@ Original Data:     Extended Data:
                    │  N rows   │ (parity)
                    │           │
                    └───────────┘
-```text
+```
 
 Each row contains `rowSize` bytes, where:
 
 - `rowSize` must be a multiple of 64 (Leopard constraint)
 - When processing RLCs, each row is interpreted as `rowSize/2` GF(2^16) symbols (since each GF(2^16) symbol is 2 bytes)
-
 
 ## 3. Codec Specification
 
@@ -113,14 +112,13 @@ Each row contains `rowSize` bytes, where:
 K:       Number of original rows (1 ≤ K ≤ 2^16)
 N:       Number of parity rows (1 ≤ N ≤ 2^16, K+N ≤ 2^16)
 rowSize: Size of each row in bytes (multiple of 64)
-```text
+```
 
 **Parameter Constraints:**
 
 - K can be any positive integer up to 2^16
 - N can be any positive integer such that K+N ≤ 2^16
 - rowSize must be at least 64 and a multiple of 64 (Leopard constraint)
-
 
 **Tree Padding Strategy:**
 For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
@@ -456,26 +454,29 @@ Row 0: 0x00000000000000000000000000000000000000000000000000000000000000000000000
 Row 1: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002
 Row 2: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003
 Row 3: 0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004
-```text
+```
 
 **Expected commitment**:
+
 ```text
 0xa71c1e91387fc13003c3bb3891ab1dbe3fd00ddec2223064a5542f1e70ead50d
-```text
+```
 
 ### 6.2 Test Vector 2: K=3, N=9, rowSize=256
 
 **Input data** (3 rows × 256 bytes each, all zeros except last byte):
+
 ```text
 Row 0: 0x00...(255 zero bytes)...01
 Row 1: 0x00...(255 zero bytes)...02
 Row 2: 0x00...(255 zero bytes)...03
-```text
+```
 
 **Expected commitment**:
+
 ```text
 0x4df24d6b09fe07061a6835405c86eca4176c447592e487d4317f667452c05775
-```text
+```
 
 ### 6.3 Verification Test Cases
 
@@ -493,10 +494,10 @@ Row 2: 0x00...(255 zero bytes)...03
 - SHA-256: FIPS 180-4
 - Merkle Trees: RFC 6962 (adapted for binary trees)
 
-
 ## Appendix A: Leopard-Specific Operations
 
 ### A.1 Symbol Extraction from Leopard Share
+
 Leopard uses an interleaved format for GF(2^16) symbols within 64-byte chunks:
 
 ```text
@@ -504,13 +505,14 @@ ExtractSymbols(chunk[64]): // Returns 32 GF(2^16) symbols
     for i in 0..32:
         symbol[i] = (chunk[32+i] << 8) | chunk[i]
     return symbol[0..32]
-```text
+```
 
 Each 64-byte chunk independently contains 32 symbols. For rows larger than 64 bytes, each chunk is processed separately.
 
 ### A.2 Visual Representation of Leopard Format
 
 **64-byte chunk format:**
+
 ```text
 ┌─────────────────── 64-byte Leopard chunk ─────────────────────┐
 │                                                               │
@@ -523,9 +525,10 @@ Each 64-byte chunk independently contains 32 symbols. For rows larger than 64 by
 └───────────────────────────────────────────────────────────────┘
 
 Each GF(2^16) symbol i = (Hᵢ << 8) | Lᵢ
-```text
+```
 
 **256-byte row (4 chunks):**
+
 ```text
 ┌─────────────────── 256-byte Leopard row ──────────────────────┐
 │                                                               │
@@ -546,23 +549,27 @@ Each GF(2^16) symbol i = (Hᵢ << 8) | Lᵢ
 │    └─ Bytes 224-255: High bytes of symbols 96-127             │
 │                                                               │
 └───────────────────────────────────────────────────────────────┘
-```text
+```
 
 ## Appendix B: Serialization Formats
 
 ### B.1 GF128 Serialization
+
 16 bytes, little-endian encoding of 8 uint16 limbs:
+
 ```text
 bytes[0:2]   = limb[0] (little-endian uint16)
 bytes[2:4]   = limb[1] (little-endian uint16)
 ...
 bytes[14:16] = limb[7] (little-endian uint16)
-```text
+```
 
 ### B.2 GF128 Packing for Leopard Extension
+
 When extending RLC results using Reed-Solomon, GF128 values must be packed into Leopard's interleaved format:
 
 **PackGF128ToLeopard**: Converts GF128 to 64-byte Leopard shard
+
 ```text
 Input: GF128 value (8 GF16 symbols)
 Output: 64-byte Leopard-formatted shard
@@ -574,30 +581,33 @@ for i in 0..8:
 for i in 8..32:
     shard[i] = 0                        // Zero padding (low bytes)
     shard[32+i] = 0                     // Zero padding (high bytes)
-```text
+```
 
 **UnpackGF128FromLeopard**: Extracts GF128 from 64-byte Leopard shard
+
 ```text
 Input: 64-byte Leopard-formatted shard
 Output: GF128 value (8 GF16 symbols)
 
 for i in 0..8:
     symbol[i] = (shard[32+i] << 8) | shard[i]
-```text
+```
 
 This packing ensures proper Reed-Solomon encoding of RLC values while respecting Leopard's interleaved symbol format.
 
 ### B.3 Merkle Tree Construction
+
 - Binary tree with power-of-2 leaves (RFC 6962 compatible)
 - Leaf nodes: SHA256(0x00 || leafData) - prefix byte ensures domain separation
 - Internal nodes: SHA256(0x01 || left || right) - different prefix for internal nodes
 - This format matches RFC 6962 and is compatible with CometBFT/Celestia-core
 
-
 ### B.4 Proof Serialization
+
 Recommended format (implementers may choose alternatives):
 
 For original rows (index < K):
+
 ```text
 [4 bytes]    index (uint32, little-endian)
 [4 bytes]    rowSize (uint32, little-endian)
@@ -606,9 +616,10 @@ For original rows (index < K):
 [variable]   rowProof (concatenated 32-byte hashes)
 [4 bytes]    rlcProofLen (uint32, little-endian)
 [variable]   rlcProof (concatenated 32-byte hashes)
-```text
+```
 
 For extended rows (index ≥ K):
+
 ```text
 [4 bytes]    index (uint32, little-endian)
 [4 bytes]    rowSize (uint32, little-endian)
@@ -616,30 +627,34 @@ For extended rows (index ≥ K):
 [4 bytes]    rowProofLen (uint32, little-endian)
 [variable]   rowProof (concatenated 32-byte hashes)
 [K × 16]     rlcOrig (serialized GF128 values)
-```text
+```
 
 ## Appendix C: Bulk Data Read Paths
 
 The codec supports two primary read patterns for committed data:
 
 ### C.1 Single Row Reading (Random Sampling)
+
 This is the standard proof generation and verification as described in sections 3.4 and 3.5. Used for:
+
 - Light client sampling
 - Individual row verification
 - Spot checking data availability
 
-
 Each row is proven independently with its own Merkle proofs.
 
 ### C.2 Full Original Data Reading (Bulk Download)
+
 For applications that need to retrieve all K original rows (e.g., rollups downloading the entire block), a more efficient approach uses subtree proofs:
 
 #### C.2.1 Bulk Proof Generation
+
 **Input**: Extended data, commitment
 
 **Process**:
 
 1. **Include All Original Row Data**
+
    ```text
    bulkProof.rowsOrig = rows[0..K]  // All K original rows
    ```
