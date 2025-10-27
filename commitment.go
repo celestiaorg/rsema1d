@@ -9,7 +9,18 @@ import (
 
 // deriveCoefficients generates RLC coefficients via Fiat-Shamir (internal)
 func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
-	seed := sha256.Sum256(rowRoot[:])
+	h := sha256.New()
+	h.Write(rowRoot[:])
+
+	// Include configuration parameters
+	var buf [12]byte
+	binary.LittleEndian.PutUint32(buf[0:4], uint32(config.K))
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(config.N))
+	binary.LittleEndian.PutUint32(buf[8:12], uint32(config.RowSize))
+	h.Write(buf[:])
+
+	seed := h.Sum(nil)
+
 	numSymbols := config.RowSize / 2 // Each GF16 symbol is 2 bytes
 	coeffs := make([]field.GF128, numSymbols)
 
