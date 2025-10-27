@@ -17,7 +17,6 @@ func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
 	binary.LittleEndian.PutUint32(buf[4:8], uint32(config.N))
 	binary.LittleEndian.PutUint32(buf[8:12], uint32(config.RowSize))
 	h.Write(buf[:])
-
 	seed := h.Sum(nil)
 
 	numSymbols := config.RowSize / 2
