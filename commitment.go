@@ -12,7 +12,6 @@ func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
 	h := sha256.New()
 	h.Write(rowRoot[:])
 
-	// Include configuration parameters
 	var buf [12]byte
 	binary.LittleEndian.PutUint32(buf[0:4], uint32(config.K))
 	binary.LittleEndian.PutUint32(buf[4:8], uint32(config.N))
@@ -21,12 +20,12 @@ func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
 
 	seed := h.Sum(nil)
 
-	numSymbols := config.RowSize / 2 // Each GF16 symbol is 2 bytes
+	numSymbols := config.RowSize / 2
 	coeffs := make([]field.GF128, numSymbols)
 
 	for i := 0; i < numSymbols; i++ {
 		h := sha256.New()
-		h.Write(seed[:])
+		h.Write(seed)
 		err := binary.Write(h, binary.LittleEndian, uint32(i))
 		if err != nil {
 			// TODO: propagate error
