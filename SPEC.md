@@ -273,20 +273,20 @@ MapIndexToTreePosition(index, K):
 
    ```text
    rlcOrigTree = buildPaddedRLCTree(rlcOrig, K, false)
-   rlcRoot = rlcOrigTree.root()
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 6. **Final Commitment**
 
    ```text
-   commitment = SHA256(rowRoot || rlcRoot)
+   commitment = SHA256(rowRoot || rlcOrigRoot)
    ```
 
 **Output**:
 
 - `commitment`: 32-byte commitment
 - `rowRoot`: 32-byte Merkle root of rows (tree built directly over row data)
-- `rlcRoot`: 32-byte Merkle root of RLC results
+- `rlcOrigRoot`: 32-byte Merkle root of RLC results
 
 ### 3.4 Proof Generation
 
@@ -317,7 +317,7 @@ MapIndexToTreePosition(index, K):
      ```
 
    - **Note**: No additional proof needed. The verifier will extend these K values
-     to K+N values and compute the rlcRoot directly.
+     to K+N values and compute the rlcExtendedRoot directly.
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
@@ -344,7 +344,7 @@ In practice, proof transmission can be optimized based on the verification conte
 
 1. **When verifier already has `rlcOrig`** (e.g., data availability sampling where verifier downloads `rlcOrig` once and verifies multiple rows):
    - For extended rows: No need to send `rlcOrig` in each proof
-   - For original rows: No need to send `rlcProof` (verifier can compute `rlcRoot` from their copy of `rlcOrig`)
+   - For original rows: No need to send `rlcProof` (verifier can compute `rlcOrigRoot` from their copy of `rlcOrig`)
    - Only send: `index`, `row`, and `rowProof`
 
 2. **When verifier doesn't have `rlcOrig`** (e.g., single original row read by a rollup):
@@ -386,7 +386,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    ```text
    // Compute RLC root from proof
    rlcBytes = Serialize(rlcI)  // Convert to 16 bytes
-   rlcRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
+   rlcOrigRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
    ```
 
 4. **For Extended Rows (proof.index ≥ K):**
@@ -401,14 +401,14 @@ This optimization can significantly reduce proof sizes, especially for extended 
    // Build the padded RLC tree
    paddedRLCLeaves = buildPaddedRlcTree(rlcExtended, K, N, true)
    rlcExtendedTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcExtendedTree.root()
+   rlcExtendedRoot = rlcExtendedTree.root()
    ```
 
 5. **Verify Final Commitment**
 
    ```text
-   // Verify the commitment matches SHA256(rowRoot || rlcRoot)
-   computedCommitment = SHA256(rowRoot || rlcRoot)
+   // Verify the commitment matches SHA256(rowRoot || rlcOrigRoot)
+   computedCommitment = SHA256(rowRoot || rlcOrigRoot)
    assert computedCommitment == commitment
    ```
 
@@ -736,13 +736,13 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 5. **Verify RLC Original Subtree is Part of Full Tree**
 
    ```text
-   rlcRoot = ComputeRootFromLeftSubtreeProof(rlcOrigRoot, bulkProof.rlcOrigProof)
+   rlcExtendedRoot = ComputeRootFromLeftSubtreeProof(rlcOrigRoot, bulkProof.rlcOrigProof)
    ```
 
 6. **Verify Final Commitment**
 
    ```text
-   computedCommitment = SHA256(rowRoot || rlcRoot)
+   computedCommitment = SHA256(rowRoot || rlcOrigRoot)
    assert computedCommitment == commitment
    ```
 
