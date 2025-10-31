@@ -226,7 +226,7 @@ MapIndexToTreePosition(index, K):
    rowRoot = rowTree.root()
    ```
 
-2. **Derive RLC Coefficients**
+1. **Derive RLC Coefficients**
 
    ```text
    seed = SHA256(rowRoot)
@@ -240,7 +240,7 @@ MapIndexToTreePosition(index, K):
    - Taking bytes 16-31 as 8 little-endian uint16 values
    - XORing corresponding pairs to produce final 8 GF(2^16) values
 
-3. **Compute RLC Results (Original Rows Only)**
+1. **Compute RLC Results (Original Rows Only)**
 
    ```text
    for i in 0..K:
@@ -253,7 +253,7 @@ MapIndexToTreePosition(index, K):
                rlc[i] += symbols[j] * coeffs[symbolIndex]  // GF16 × GF128
    ```
 
-4. **Extend RLC Results**
+1. **Extend RLC Results**
 
    ```text
    // Each GF128 value is 8 GF16 symbols
@@ -269,14 +269,14 @@ MapIndexToTreePosition(index, K):
        rlcExtended[i] = UnpackGF128FromLeopard(extendedShards[i])
    ```
 
-5. **Compute RLC Root**
+1. **Compute RLC Root**
 
    ```text
    rlcOrigTree = buildPaddedRLCTree(rlcOrig, K, false)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
-6. **Final Commitment**
+1. **Final Commitment**
 
    ```text
    commitment = SHA256(rowRoot || rlcOrigRoot)
