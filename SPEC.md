@@ -253,8 +253,8 @@ MapIndexToTreePosition(index, K):
 
    ```text
    paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
-   rlcTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcTree.root()
+   rlcExtendedTree = MerkleTree(paddedRLCLeaves)
+   rlcRoot = rlcExtendedTree.root()
    ```
 
 1. **Final Commitment**
@@ -304,7 +304,7 @@ MapIndexToTreePosition(index, K):
    - **Generate RLC Merkle Proof**
 
      ```text
-     proof.rlcProof = rlcTree.generateProof(i)  // Same position as in padded tree
+     proof.rlcProof = rlcExtendedTree.generateProof(i)  // Same position as in padded tree
      ```
 
 **Output**: Proof containing:
@@ -381,8 +381,8 @@ This optimization can significantly reduce proof sizes, especially for extended 
 
    // Build the padded RLC tree
    paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
-   rlcTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcTree.root()
+   rlcExtendedTree = MerkleTree(paddedRLCLeaves)
+   rlcRoot = rlcExtendedTree.root()
    ```
 
 5. **Verify Final Commitment**
@@ -672,7 +672,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    Similarly, the first K RLC values form a complete binary subtree.
 
    ```text
-   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcTree, K)
+   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcExtendedTree, K)
    ```
 
 **Output**: Bulk proof containing:
