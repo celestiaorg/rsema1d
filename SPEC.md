@@ -252,9 +252,8 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
-   rlcExtendedTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcExtendedTree.root()
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcRoot = rlcOrigTree.root()
    ```
 
 1. **Final Commitment**
