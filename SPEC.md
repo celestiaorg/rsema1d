@@ -196,8 +196,7 @@ buildPaddedRLCTree(rlcExtended, K, N, extended):
    # 3. Extended RLC rows (only when using extended form)
    if extended:
       for i in 0 .. N-1:
-         paddedRLCLeaves[K_padded + i] =
-               Serialize(rlcExtended[K + i])
+         paddedRLCLeaves[K_padded + i] = Serialize(rlcExtended[K + i])
 
       # 4. Final padding up to total_padded
       for i in K_padded + N .. total_padded-1:
@@ -227,7 +226,7 @@ MapIndexToTreePosition(index, K):
    rowRoot = rowTree.root()
    ```
 
-1. **Derive RLC Coefficients**
+2. **Derive RLC Coefficients**
 
    ```text
    seed = SHA256(rowRoot)
@@ -241,7 +240,7 @@ MapIndexToTreePosition(index, K):
    - Taking bytes 16-31 as 8 little-endian uint16 values
    - XORing corresponding pairs to produce final 8 GF(2^16) values
 
-1. **Compute RLC Results (Original Rows Only)**
+3. **Compute RLC Results (Original Rows Only)**
 
    ```text
    for i in 0..K:
@@ -254,7 +253,7 @@ MapIndexToTreePosition(index, K):
                rlc[i] += symbols[j] * coeffs[symbolIndex]  // GF16 × GF128
    ```
 
-1. **Extend RLC Results**
+4. **Extend RLC Results**
 
    ```text
    // Each GF128 value is 8 GF16 symbols
@@ -270,14 +269,14 @@ MapIndexToTreePosition(index, K):
        rlcExtended[i] = UnpackGF128FromLeopard(extendedShards[i])
    ```
 
-1. **Compute RLC Root**
+5. **Compute RLC Root**
 
    ```text
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K, false)
    rlcRoot = rlcOrigTree.root()
    ```
 
-1. **Final Commitment**
+6. **Final Commitment**
 
    ```text
    commitment = SHA256(rowRoot || rlcRoot)
@@ -400,7 +399,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    assert rlcI == rlcExtended[proof.index]
 
    // Build the padded RLC tree
-   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
+   paddedRLCLeaves = buildPaddedRlcTree(rlcExtended, K, N, true)
    rlcExtendedTree = MerkleTree(paddedRLCLeaves)
    rlcRoot = rlcExtendedTree.root()
    ```
@@ -479,7 +478,7 @@ Row 3: 0x00000000000000000000000000000000000000000000000000000000000000000000000
 **Expected commitment**:
 
 ```text
-0xa71c1e91387fc13003c3bb3891ab1dbe3fd00ddec2223064a5542f1e70ead50d
+0xe10456717ceee4a66f0c234d8c75ff5e9a9b5b2c3bf17ed31be37eb906e9dc3b
 ```
 
 ### 6.2 Test Vector 2: K=3, N=9, rowSize=256
@@ -495,7 +494,7 @@ Row 2: 0x00...(255 zero bytes)...03
 **Expected commitment**:
 
 ```text
-0x4df24d6b09fe07061a6835405c86eca4176c447592e487d4317f667452c05775
+0xb408965a2e9271681472806c691d2344ae1bc59bd225ee9cb80c1ac486d2c9bf
 ```
 
 ### 6.3 Verification Test Cases
