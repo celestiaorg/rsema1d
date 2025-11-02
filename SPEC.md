@@ -179,7 +179,7 @@ buildPaddedRowTree(rowExtended, K, N):
    return MerkleTree(paddedRows, WorkerCount)
 
 // BuildPaddedRLCTree creates a padded tree from RLC data
-buildPaddedRLCTree(rlcExtended, K, N, extended):
+buildPaddedRLCTree(rlcExtended, K, N):
    K_padded     = nextPowerOfTwo(K)
    total_padded = nextPowerOfTwo(K_padded + N)
    paddedRLCLeaves = new array[total_padded]
@@ -192,15 +192,6 @@ buildPaddedRLCTree(rlcExtended, K, N, extended):
    # 2. Padding up to K_padded
    for i in K .. K_padded-1:
       paddedRLCLeaves[i] = zeroRLC
-
-   # 3. Extended RLC rows (only when using extended form)
-   if extended:
-      for i in 0 .. N-1:
-         paddedRLCLeaves[K_padded + i] = Serialize(rlcExtended[K + i])
-
-      # 4. Final padding up to total_padded
-      for i in K_padded + N .. total_padded-1:
-         paddedRLCLeaves[i] = zeroRLC
 
 return MerkleTree(paddedRLCLeaves, WorkerCount)
 
