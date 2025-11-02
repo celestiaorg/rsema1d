@@ -153,7 +153,7 @@ For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
 **Helper Functions:**
 
 ```text
-// BuildPaddedRowArray creates a padded tree for extended row data
+// buildPaddedRowTree creates a padded tree for extended row data
 buildPaddedRowTree(rowExtended, K, N):
    zeroRow = new byte[RowSize]
    paddedRows = new array[totalPadded]
@@ -389,22 +389,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    rlcOrigRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
    ```
 
-4. **For Extended Rows (proof.index ≥ K):**
-
-   ```text
-   // Extend the K original RLC values to get all K+N values
-   rlcExtended = LeopardExtend(proof.rlcOrig, K, N)
-
-   // Verify the computed RLC matches the extended value
-   assert rlcI == rlcExtended[proof.index]
-
-   // Build the padded RLC tree
-   paddedRLCLeaves = buildPaddedRlcTree(rlcExtended, K, N, true)
-   rlcExtendedTree = MerkleTree(paddedRLCLeaves)
-   rlcExtendedRoot = rlcExtendedTree.root()
-   ```
-
-5. **Verify Final Commitment**
+4. **Verify Final Commitment**
 
    ```text
    // Verify the commitment matches SHA256(rowRoot || rlcOrigRoot)
@@ -733,13 +718,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    rlcOrigRoot = MerkleRoot(rlcLeaves)
    ```
 
-5. **Verify RLC Original Subtree is Part of Full Tree**
-
-   ```text
-   rlcExtendedRoot = ComputeRootFromLeftSubtreeProof(rlcOrigRoot, bulkProof.rlcOrigProof)
-   ```
-
-6. **Verify Final Commitment**
+5. **Verify Final Commitment**
 
    ```text
    computedCommitment = SHA256(rowRoot || rlcOrigRoot)
