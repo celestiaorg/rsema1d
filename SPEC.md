@@ -263,7 +263,7 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K, false)
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
