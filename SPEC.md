@@ -203,7 +203,7 @@ MapIndexToTreePosition(index, K):
         return index
     else:
         return K_padded + (index - K)
-```text
+```
 
 **Input**: Extended data (K+N rows)
 
