@@ -186,11 +186,11 @@ buildPaddedRLCTree(rlcExtended, K, N):
    zeroRLC         = new byte[16]
 
    # 1. Original RLC rows
-   for i in 0 .. K-1:
+   for i in 0 .. K:
       paddedRLCLeaves[i] = Serialize(rlcExtended[i])
 
    # 2. Padding up to K_padded
-   for i in K .. K_padded-1:
+   for i in K .. K_padded:
       paddedRLCLeaves[i] = zeroRLC
 
 return MerkleTree(paddedRLCLeaves, WorkerCount)
