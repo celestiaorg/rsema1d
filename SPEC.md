@@ -311,7 +311,7 @@ MapIndexToTreePosition(index, K):
   - `rlcOrig`: Original RLC results (K × 16 bytes)
 - For original rows (i < K):
 
-  - `rlcProof`: Merkle proof for RLC result (log2(K+N) × 32 bytes)
+  - `rlcProof`: Merkle proof for original RLC result (log2(K) × 32 bytes)
 
 **Implementor's Note on Proof Optimization:**
 
