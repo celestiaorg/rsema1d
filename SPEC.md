@@ -364,7 +364,20 @@ This optimization can significantly reduce proof sizes, especially for extended 
    rlcOrigRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
    ```
 
-4. **Verify Final Commitment**
+4. **For Extended Rows (proof.index ≥ K):**
+
+   ```text
+   // Extend original RLC values to verify extended row
+   rlcExtended = ExtendRLCResults(proof.rlcOrig, N)
+   
+   // Verify computed RLC matches extended value
+   assert rlcI == rlcExtended[proof.index]
+   
+   // Compute RLC root from original values
+   rlcOrigRoot = MerkleRoot(Serialize(proof.rlcOrig[0..K]))
+   ```
+
+5. **Verify Final Commitment**
 
    ```text
    // Verify the commitment matches SHA256(rowRoot || rlcOrigRoot)
