@@ -314,7 +314,7 @@ MapIndexToTreePosition(index, K):
    - **Generate RLC Merkle Proof**
 
      ```text
-     proof.rlcProof = rlcExtendedTree.generateProof(i)  // Same position as in padded tree
+     proof.rlcProof = rlcOrigTree.generateProof(i)  // Same position as in padded tree
      ```
 
 **Output**: Proof containing:
@@ -322,7 +322,7 @@ MapIndexToTreePosition(index, K):
 - `index`: Row index
 - `row`: Row data (rowSize bytes)
 - `rowProof`: Merkle proof for row (log2(K+N) × 32 bytes)
-- For extended rows (i ≥ K):
+- For extended rows (i ≥ K), where verifier must extend themselves:
 
   - `rlcOrig`: Original RLC results (K × 16 bytes)
 - For original rows (i < K):
