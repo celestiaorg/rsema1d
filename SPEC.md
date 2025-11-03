@@ -244,22 +244,6 @@ MapIndexToTreePosition(index, K):
                rlc[i] += symbols[j] * coeffs[symbolIndex]  // GF16 × GF128
    ```
 
-1. **Extend RLC Results**
-
-   ```text
-   // Each GF128 value is 8 GF16 symbols
-   // Pack into Leopard format: 64-byte shards with first 8 symbols as RLC, 24 zeros
-   for i in 0..K:
-       shard[i] = PackGF128ToLeopard(rlc[i])  // See Appendix B.2
-
-   // Apply RS encoding to generate N parity shards
-   extendedShards = LeopardExtend(shard[0..K], K, N)
-
-   // Unpack GF128 values from extended shards
-   for i in 0..(K+N):
-       rlcExtended[i] = UnpackGF128FromLeopard(extendedShards[i])
-   ```
-
 1. **Compute RLC Root**
 
    ```text
