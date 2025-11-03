@@ -62,7 +62,6 @@ RSEMA1D (Reed-Solomon Evans-Mohnblatt-Angeris 1D) is a data availability codec t
 - `0..K` iterates over values 0, 1, 2, ..., K-1
 - `K..K_padded` iterates over values K, K+1, ..., K_padded-1
 
-
 ## 2. Mathematical Foundations
 
 ### 2.1 Field Definitions
