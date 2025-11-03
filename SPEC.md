@@ -58,8 +58,10 @@ RSEMA1D (Reed-Solomon Evans-Mohnblatt-Angeris 1D) is a data availability codec t
 ### Notation Conventions
 
 **Iterator Ranges**: All iterators in this specification use exclusive notation. Ranges like `0..K` imply that the target (`K`) is excluded and the initial value (`0`) is included. For example:
+
 - `0..K` iterates over values 0, 1, 2, ..., K-1
 - `K..K_padded` iterates over values K, K+1, ..., K_padded-1
+
 
 ## 2. Mathematical Foundations
 
@@ -157,6 +159,7 @@ For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
 ### 3.3 Commitment Generation
 
 **Helper Functions:**
+
 ```text
 // buildPaddedRowTree creates a padded tree for extended row data
 buildPaddedRowTree(rowExtended, K, N):
