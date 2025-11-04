@@ -218,9 +218,7 @@ MapIndexToTreePosition(index, K):
 1. **Compute Row Root**
 
    ```text
-   paddedRows = BuildPaddedRowArray(rows, K, N)
-   rowTree = MerkleTree(paddedRows)
-  rowTree =   buildPaddedRLCTree(rows, K, N)
+  rowTree = buildPaddedRowTree(rows, K, N)
   rowRoot = rowTree.root()
    ```
 
