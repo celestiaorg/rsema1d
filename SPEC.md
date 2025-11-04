@@ -188,8 +188,7 @@ buildPaddedRowTree(rowExtended, K, N):
 // buildPaddedRLCTree creates a padded tree from RLC data
 buildPaddedRLCTree(rlcOrig, K, N):
    K_padded     = nextPowerOfTwo(K)
-   total_padded = nextPowerOfTwo(K_padded + N)
-   paddedRLCLeaves = new array[total_padded]
+   paddedRLCLeaves = new array[K_padded]
    zeroRLC         = new byte[16]
 
    # 1. Original RLC rows
