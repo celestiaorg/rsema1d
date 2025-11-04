@@ -671,7 +671,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    Similarly, the first K RLC values form a complete binary subtree.
 
    ```text
-   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcExtendedTree, K)
+   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcOrigTree, K)
    ```
 
 **Output**: Bulk proof containing:
