@@ -221,7 +221,8 @@ MapIndexToTreePosition(index, K):
    ```text
    paddedRows = BuildPaddedRowArray(rows, K, N)
    rowTree = MerkleTree(paddedRows)
-   rowRoot = rowTree.root()
+  rowTree =   buildPaddedRLCTree(rows, K, N)
+  rowRoot = rowTree.root()
    ```
 
 1. **Derive RLC Coefficients**
