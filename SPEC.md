@@ -160,8 +160,8 @@ For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
 **Helper Functions:**
 
 ```text
-// buildPaddedRowTree creates a padded tree for extended row data
-buildPaddedRowTree(rowExtended, K, N):
+// BuildPaddedRowTree creates a padded tree for extended row data
+BuildPaddedRowTree(rowExtended, K, N):
    zeroRow = new byte[RowSize]
    paddedRows = new array[totalPadded]
    # Fill paddedRows with: [original | padding | extended | padding]
@@ -185,8 +185,8 @@ buildPaddedRowTree(rowExtended, K, N):
 
    return MerkleTree(paddedRows, WorkerCount)
 
-// buildPaddedRLCTree creates a padded tree from RLC data
-buildPaddedRLCTree(rlcOrig, K, N):
+// BuildPaddedRLCTree creates a padded tree from RLC data
+BuildPaddedRLCTree(rlcOrig, K, N):
    K_padded     = nextPowerOfTwo(K)
    paddedRLCLeaves = new array[K_padded]
    zeroRLC         = new byte[16]
@@ -218,7 +218,7 @@ MapIndexToTreePosition(index, K):
 1. **Compute Row Root**
 
     ```text
-    rowTree = buildPaddedRowTree(rows, K, N)
+    rowTree = BuildPaddedRowTree(rows, K, N)
     rowRoot = rowTree.root()
     ```
 
@@ -253,7 +253,7 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
