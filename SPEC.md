@@ -773,6 +773,7 @@ GenerateLeftSubtreeProof(tree, K):
 Note: Since the tree is padded to K_padded, the proof starts from the K_padded subtree boundary.
 
 ### Example 1: K=4, N=4 (8 total leaves)
+
 ```text
                      Root_0-7
                     /        \
@@ -786,9 +787,11 @@ Note: Since the tree is padded to K_padded, the proof starts from the K_padded s
       └──────┬──────┘    └──────┬──────┘
          K original         N extended
 ```
+
 Returns: [Root_4-7]
 
 ### Example 2: K=4, N=12 (16 total leaves)
+
 ```text
                               Root_0-15
                             /            \
@@ -806,17 +809,20 @@ Returns: [Root_4-7]
     └──────┬──────┘
        K original
 ```
+
 Returns: [Root_4-7, Root_8-15]
 
 #### C.3.2 ComputeRootFromLeftSubtreeProof
+
 Computes the full tree root given a left subtree root and sibling subtree roots.
 
 **Input**:
+
 - `leftSubtreeRoot`: Root of the leftmost K leaves
 - `siblingRoots`: Array of sibling subtree roots from GenerateLeftSubtreeProof
 
-
 **Algorithm**:
+
 ```text
 ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
     currentRoot = leftSubtreeRoot
@@ -829,6 +835,7 @@ ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
 ```
 
 **Visual Example (K=4, N=12)**:
+
 ```text
 Initial state:
     leftSubtreeRoot = Root_0-3
