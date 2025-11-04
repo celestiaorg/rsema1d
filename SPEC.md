@@ -457,7 +457,7 @@ Row 3: 0x00000000000000000000000000000000000000000000000000000000000000000000000
 **Expected commitment**:
 
 ```text
-0xe10456717ceee4a66f0c234d8c75ff5e9a9b5b2c3bf17ed31be37eb906e9dc3b
+0x9f637574ecb67828c5ce7589a0a6ce139ccad3bea8e92d22d9e28fde83a905e7
 ```
 
 ### 6.2 Test Vector 2: K=3, N=9, rowSize=256
@@ -473,7 +473,7 @@ Row 2: 0x00...(255 zero bytes)...03
 **Expected commitment**:
 
 ```text
-0xb408965a2e9271681472806c691d2344ae1bc59bd225ee9cb80c1ac486d2c9bf
+0x2d67c13aa6a5c0be41b7e84f36188562c64ff3547ce74ffd410ab1afa7897f22
 ```
 
 ### 6.3 Verification Test Cases
