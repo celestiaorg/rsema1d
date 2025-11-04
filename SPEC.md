@@ -768,7 +768,7 @@ GenerateLeftSubtreeProof(tree, K):
         currentSize = currentSize * 2
 
     return proof
-```text
+```
 
 Note: Since the tree is padded to K_padded, the proof starts from the K_padded subtree boundary.
 
@@ -785,7 +785,7 @@ Note: Since the tree is padded to K_padded, the proof starts from the K_padded s
       L0    L1  L2    L3  L4   L5   L6   L7
       └──────┬──────┘    └──────┬──────┘
          K original         N extended
-```text
+```
 Returns: [Root_4-7]
 
 ### Example 2: K=4, N=12 (16 total leaves)
@@ -805,7 +805,7 @@ Returns: [Root_4-7]
     L0    L1  L2    L3
     └──────┬──────┘
        K original
-```text
+```
 Returns: [Root_4-7, Root_8-15]
 
 #### C.3.2 ComputeRootFromLeftSubtreeProof
@@ -826,7 +826,7 @@ ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
         currentRoot = SHA256(currentRoot || siblingRoot)
 
     return currentRoot
-```text
+```
 
 **Visual Example (K=4, N=12)**:
 ```text
@@ -847,4 +847,4 @@ Step 2: Combine Root_0-7 with Root_8-15
          (step 1)      (proof[1])
 
 Final: Root_0-15
-```text
+```
