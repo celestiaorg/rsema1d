@@ -677,7 +677,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 
 - `rowsOrig`: All K original rows (K × rowSize bytes)
 - `rowOrigProof`: Sibling roots to prove K-row subtree is in (K+N)-row tree (≤ log2(K+N) × 32 bytes)
-- `rlcOrigProof`: Sibling roots to prove K-RLC subtree is in (K+N)-RLC tree (≤ log2(K+N) × 32 bytes)
+- `rlcOrigProof`: Sibling roots to prove K-RLC subtree is in K-RLC tree (≤ log2(K) × 32 bytes)
 
 #### C.2.2 Bulk Proof Verification
 
