@@ -217,10 +217,10 @@ MapIndexToTreePosition(index, K):
 
 1. **Compute Row Root**
 
-   ```text
-  rowTree = buildPaddedRowTree(rows, K, N)
-  rowRoot = rowTree.root()
-   ```
+    ```text
+    rowTree = buildPaddedRowTree(rows, K, N)
+    rowRoot = rowTree.root()
+    ```
 
 1. **Derive RLC Coefficients**
 
@@ -232,6 +232,7 @@ MapIndexToTreePosition(index, K):
    ```
 
    Where HashToGF128 converts a 32-byte hash to a GF128 element by:
+
    - Taking bytes 0-15 as 8 little-endian uint16 values
    - Taking bytes 16-31 as 8 little-endian uint16 values
    - XORing corresponding pairs to produce final 8 GF(2^16) values
