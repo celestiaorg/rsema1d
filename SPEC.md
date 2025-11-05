@@ -666,11 +666,16 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    bulkProof.rowOrigProof = GenerateLeftSubtreeProof(rowTree, K)
    ```
 
+1. **Generate Rlc Original Merkle Proof**
+
+   ```text
+   bulkProof.rlcOrigProof = rlcOrigTree.GenerateProof(index)
+   ```
+
 **Output**: Bulk proof containing:
 
 - `rowsOrig`: All K original rows (K × rowSize bytes)
 - `rowOrigProof`: Sibling roots to prove K-row subtree is in (K+N)-row tree (≤ log2(K+N) × 32 bytes)
-- `rlcOrigProof`: Sibling roots to prove original RLC values are contained in the committed merkle tree (≤ log2(K) × 32 bytes)
 
 #### C.2.2 Bulk Proof Verification
 
@@ -698,7 +703,14 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
        rlcOrig[i] = ComputeRLC(bulkProof.rowsOrig[i], coeffs)
    ```
 
-4. **Verify Final Commitment**
+4. **Compute Original RLC Root**
+
+   ```text
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
+   rlcOrigRoot = rlcOrigTree.root()
+   ```
+
+5. **Verify Final Commitment**
 
    ```text
    computedCommitment = SHA256(rowRoot || rlcOrigRoot)
