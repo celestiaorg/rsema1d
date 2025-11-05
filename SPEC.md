@@ -253,8 +253,8 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
-   rlcOrigRoot = rlcOrigTree.root()
+   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
+   rlcOrigRoot = MerkleRoot(rlcLeaves)
    ```
 
 1. **Final Commitment**
@@ -706,8 +706,8 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 4. **Compute Original RLC Root**
 
    ```text
-   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
-   rlcOrigRoot = rlcOrigTree.root()
+   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
+   rlcOrigRoot = MerkleRoot(rlcLeaves)
    ```
 
 5. **Verify Final Commitment**
