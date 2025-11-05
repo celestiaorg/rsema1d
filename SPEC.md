@@ -702,7 +702,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 4. **Compute Original RLC Root**
 
    ```text
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
