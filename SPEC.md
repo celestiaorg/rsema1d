@@ -253,7 +253,7 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
@@ -380,7 +380,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    assert rlcI == rlcExtended[proof.index]
    
    // Compute RLC root from original values
-   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
