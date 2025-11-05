@@ -253,8 +253,8 @@ MapIndexToTreePosition(index, K):
 1. **Compute RLC Root**
 
    ```text
-   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
-   rlcOrigRoot = MerkleRoot(rlcLeaves)
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcRoot = rlcOrigTree.root()
    ```
 
 1. **Final Commitment**
@@ -380,7 +380,8 @@ This optimization can significantly reduce proof sizes, especially for extended 
    assert rlcI == rlcExtended[proof.index]
    
    // Compute RLC root from original values
-   rlcOrigRoot = MerkleRoot(Serialize(proof.rlcOrig[0..K]))
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcRoot = rlcOrigTree.root()
    ```
 
 5. **Verify Final Commitment**
@@ -680,7 +681,8 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 1. **Compute Row Original Subtree Root**
 
    ```text
-   rowOrigRoot = MerkleRoot(bulkProof.rowsOrig[0..K])  // Build tree directly over rows
+   rowOrigTree = buildPaddedRowTree(rowOrig, K)
+   rowRoot = rowOrigTree.root()
    ```
 
 2. **Verify Row Original Subtree is Part of Full Tree**
@@ -700,8 +702,8 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 4. **Compute Original RLC Root**
 
    ```text
-   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
-   rlcOrigRoot = MerkleRoot(rlcLeaves)
+   rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
+   rlcRoot = rlcOrigTree.root()
    ```
 
 5. **Verify Final Commitment**
