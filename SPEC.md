@@ -254,7 +254,7 @@ MapIndexToTreePosition(index, K):
 
    ```text
    rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
-   rlcRoot = rlcOrigTree.root()
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 1. **Final Commitment**
@@ -381,7 +381,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    
    // Compute RLC root from original values
    rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
-   rlcRoot = rlcOrigTree.root()
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 5. **Verify Final Commitment**
@@ -703,7 +703,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 
    ```text
    rlcOrigTree = buildPaddedRLCTree(rlcOrig, K)
-   rlcRoot = rlcOrigTree.root()
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 5. **Verify Final Commitment**
