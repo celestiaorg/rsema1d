@@ -697,7 +697,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    for i in 0..K:
        rlcOrig[i] = ComputeRLC(bulkProof.rowsOrig[i], coeffs)
    ```
-   
+
 4. **Verify Final Commitment**
 
    ```text
