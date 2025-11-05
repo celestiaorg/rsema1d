@@ -681,7 +681,7 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 1. **Compute Row Original Subtree Root**
 
    ```text
-   rowOrigTree = buildPaddedRowTree(rowOrig, K)
+   rowOrigTree = BuildPaddedRowTree(rowOrig, K)
    rowRoot = rowOrigTree.root()
    ```
 
