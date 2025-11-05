@@ -666,12 +666,6 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    bulkProof.rowOrigProof = GenerateLeftSubtreeProof(rowTree, K)
    ```
 
-1. **Generate Rlc Original Merkle Proof**
-
-   ```text
-   bulkProof.rlcOrigProof = rlcOrigTree.GenerateProof(index)
-   ```
-
 **Output**: Bulk proof containing:
 
 - `rowsOrig`: All K original rows (K × rowSize bytes)
