@@ -697,15 +697,8 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    for i in 0..K:
        rlcOrig[i] = ComputeRLC(bulkProof.rowsOrig[i], coeffs)
    ```
-
-4. **Compute RLC Original Subtree Root**
-
-   ```text
-   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
-   rlcOrigRoot = MerkleRoot(rlcLeaves)
-   ```
-
-5. **Verify Final Commitment**
+   
+4. **Verify Final Commitment**
 
    ```text
    computedCommitment = SHA256(rowRoot || rlcOrigRoot)
