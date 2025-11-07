@@ -380,7 +380,7 @@ This optimization can significantly reduce proof sizes, especially for extended 
    assert rlcI == rlcExtended[proof.index]
    
    // Compute RLC root from original values
-   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
+   rlcOrigTree = BuildPaddedRLCTree(proof.rlcOrig, K)
    rlcOrigRoot = rlcOrigTree.root()
    ```
 
