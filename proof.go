@@ -73,9 +73,9 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return fmt.Errorf("failed to compute row root: %w", err)
 	}
 
-	// 2. Derive coefficients and compute RLC for the row
-	coeffs := deriveCoefficients(rowRoot, context.config)
-	computedRLC := computeRLC(proof.Row, coeffs, context.config)
+	// 2. Compute RLC for the row directly from the row root to avoid
+	// allocating a full coefficient slice per verification.
+	computedRLC := computeRLCFromRowRoot(proof.Row, rowRoot, context.config)
 
 	// 3. Verify RLC matches the extended value at this index
 	if proof.Index >= len(context.rlcExtended) {
@@ -136,9 +136,8 @@ func VerifyStandaloneProof(proof *StandaloneProof, commitment Commitment, config
 		return fmt.Errorf("failed to compute row root: %w", err)
 	}
 
-	// 2. Compute RLC for the row
-	coeffs := deriveCoefficients(rowRoot, config)
-	computedRLC := computeRLC(proof.Row, coeffs, config)
+	// 2. Compute RLC for the row without allocating coefficient slices
+	computedRLC := computeRLCFromRowRoot(proof.Row, rowRoot, config)
 
 	// 3. Compute RLC root from proof
 	rlcBytes := field.ToBytes128(computedRLC)
