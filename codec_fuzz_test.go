@@ -1,0 +1,501 @@
+package rsema1d
+
+import (
+	"bytes"
+	"crypto/rand"
+	"fmt"
+	mathrand "math/rand"
+	"testing"
+	"time"
+
+	"github.com/celestiaorg/rsema1d/encoding"
+	"github.com/celestiaorg/rsema1d/field"
+)
+
+// FuzzRLCVerification fuzzes the RLC computation and extension logic
+func FuzzRLCVerification(f *testing.F) {
+	// Seed the math/rand generator
+	mathrand.Seed(time.Now().UnixNano())
+	// Add some seed corpus
+	seedCases := []struct {
+		k       int
+		n       int
+		rowSize int
+	}{
+		{4, 4, 64},
+		{3, 5, 128},
+		{8, 8, 256},
+		{7, 9, 192},
+	}
+
+	for _, tc := range seedCases {
+		f.Add(uint8(tc.k), uint8(tc.n), uint16(tc.rowSize))
+	}
+
+	f.Fuzz(func(t *testing.T, kRaw uint8, nRaw uint8, rowSizeRaw uint16) {
+		// Constrain parameters to valid ranges
+		k := max(1, min(int(kRaw), 10000)) // Keep K reasonable for fuzzing
+		n := max(1, min(int(nRaw), 10000)) // Keep N reasonable for fuzzing
+
+		// Ensure K+N doesn't exceed field limits
+		if k+n > 65536 {
+			n = min(n, 65536-k)
+		}
+
+		// Ensure rowSize is multiple of 64 and reasonable
+		rowSize := max(64, int(rowSizeRaw))
+		rowSize = (rowSize / 64) * 64 // Round down to nearest multiple of 64
+		rowSize = min(rowSize, 32768) // Cap at reasonable size for fuzzing
+
+		config := &Config{
+			K:           k,
+			N:           n,
+			RowSize:     rowSize,
+			WorkerCount: 1,
+		}
+
+		if err := config.Validate(); err != nil {
+			t.Skip("Invalid config:", err)
+		}
+
+		// Generate random test data
+		data := make([][]byte, k)
+		for i := 0; i < k; i++ {
+			data[i] = make([]byte, rowSize)
+			if _, err := rand.Read(data[i]); err != nil {
+				t.Fatal("Failed to generate random data:", err)
+			}
+		}
+
+		// Test the main property: RLC extension consistency
+		testRLCExtensionConsistency(t, data, config)
+
+		// Test specific edge cases with controlled randomness
+		testRLCWithControlledData(t, config)
+
+		// Test that corrupted parity data fails verification
+		testCorruptedDataDetection(t, data, config)
+	})
+}
+
+// testRLCExtensionConsistency tests that extended RLC values match
+// RLC computations on extended rows
+func testRLCExtensionConsistency(t *testing.T, data [][]byte, config *Config) {
+	// 1. Extend the data using Reed-Solomon
+	extendedRows, err := encoding.ExtendVertical(data, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend data:", err)
+	}
+
+	// 2. Create a dummy row root for coefficient derivation
+	// (In real usage this comes from Merkle tree, but for RLC testing we just need consistent coefficients)
+	var dummyRowRoot [32]byte
+	if _, err := rand.Read(dummyRowRoot[:]); err != nil {
+		t.Fatal("Failed to generate dummy row root:", err)
+	}
+
+	// 3. Derive RLC coefficients
+	coeffs := deriveCoefficients(dummyRowRoot, config)
+
+	// 4. Compute RLC values for original rows
+	rlcOrig := make([]field.GF128, config.K)
+	for i := 0; i < config.K; i++ {
+		rlcOrig[i] = computeRLC(data[i], coeffs, config)
+	}
+
+	// 5. Extend the RLC values using Reed-Solomon
+	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend RLC results:", err)
+	}
+
+	// 6. CRITICAL TEST: Verify that RLC computation on extended rows
+	//    matches the extended RLC values
+	for i := config.K; i < config.K+config.N; i++ {
+		extendedRowIndex := i
+		expectedRLC := rlcExtended[extendedRowIndex]
+
+		// Compute RLC directly from the extended row
+		computedRLC := computeRLC(extendedRows[extendedRowIndex], coeffs, config)
+
+		if !field.Equal128(expectedRLC, computedRLC) {
+			t.Errorf("RLC mismatch for extended row %d:\nExpected: %v\nComputed: %v",
+				extendedRowIndex, expectedRLC, computedRLC)
+		}
+	}
+
+	// 7. Also verify original rows haven't changed
+	for i := 0; i < config.K; i++ {
+		expectedRLC := rlcExtended[i]
+		computedRLC := computeRLC(extendedRows[i], coeffs, config)
+
+		if !field.Equal128(expectedRLC, computedRLC) {
+			t.Errorf("RLC mismatch for original row %d:\nExpected: %v\nComputed: %v",
+				i, expectedRLC, computedRLC)
+		}
+	}
+}
+
+// testRLCWithControlledData tests RLC logic with specific patterns
+func testRLCWithControlledData(t *testing.T, config *Config) {
+	// Test with all zeros
+	testWithPattern(t, config, func(data []byte) {
+		// All zeros - should result in zero RLC
+		for i := range data {
+			data[i] = 0
+		}
+	})
+
+	// Test with single bit set in each row
+	testWithPattern(t, config, func(data []byte) {
+		// Set a different position in each row
+		for i := range data {
+			data[i] = 0
+		}
+		// Set last byte to a small value to create differentiation
+		if len(data) > 0 {
+			data[len(data)-1] = byte(mathrand.Intn(256))
+		}
+	})
+
+	// Test with random sparse data (mostly zeros)
+	testWithPattern(t, config, func(data []byte) {
+		for i := range data {
+			data[i] = 0
+		}
+		// Set a few random positions
+		numNonZero := min(len(data)/10, 5)
+		for i := 0; i < numNonZero; i++ {
+			pos := mathrand.Intn(len(data))
+			data[pos] = byte(mathrand.Intn(256))
+		}
+	})
+}
+
+// testWithPattern tests RLC with data generated by the given pattern function
+func testWithPattern(t *testing.T, config *Config, patternFunc func([]byte)) {
+	data := make([][]byte, config.K)
+	for i := 0; i < config.K; i++ {
+		data[i] = make([]byte, config.RowSize)
+		patternFunc(data[i])
+	}
+
+	testRLCExtensionConsistency(t, data, config)
+}
+
+// TestRLCConsistencyRegression tests specific regression cases
+func TestRLCConsistencyRegression(t *testing.T) {
+	// Test case that might have failed in the past
+	config := &Config{
+		K:           3,
+		N:           5,
+		RowSize:     128,
+		WorkerCount: 1,
+	}
+
+	// Create test data with known pattern
+	data := make([][]byte, config.K)
+	for i := 0; i < config.K; i++ {
+		data[i] = make([]byte, config.RowSize)
+		// Fill with incrementing pattern + row offset
+		for j := 0; j < config.RowSize; j++ {
+			data[i][j] = byte((i*256 + j) % 256)
+		}
+	}
+
+	testRLCExtensionConsistency(t, data, config)
+}
+
+// TestRLCZeroCase tests the edge case where all data is zero
+func TestRLCZeroCase(t *testing.T) {
+	config := &Config{
+		K:           4,
+		N:           4,
+		RowSize:     64,
+		WorkerCount: 1,
+	}
+
+	// All zero data
+	data := make([][]byte, config.K)
+	for i := 0; i < config.K; i++ {
+		data[i] = make([]byte, config.RowSize)
+		// data[i] is already all zeros
+	}
+
+	// Create dummy row root
+	var dummyRowRoot [32]byte
+	rand.Read(dummyRowRoot[:])
+
+	// Derive coefficients
+	coeffs := deriveCoefficients(dummyRowRoot, config)
+
+	// All RLC values should be zero for zero data
+	for i := 0; i < config.K; i++ {
+		rlc := computeRLC(data[i], coeffs, config)
+		if !field.Equal128(rlc, field.Zero()) {
+			t.Errorf("Expected zero RLC for zero data, got %v", rlc)
+		}
+	}
+
+	// Extended RLC should also be all zeros
+	rlcOrig := make([]field.GF128, config.K)
+	// rlcOrig is already all zeros (field.Zero())
+
+	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend zero RLC results:", err)
+	}
+
+	for i, rlc := range rlcExtended {
+		if !field.Equal128(rlc, field.Zero()) {
+			t.Errorf("Expected zero extended RLC at index %d, got %v", i, rlc)
+		}
+	}
+}
+
+// testCorruptedDataDetection tests that corrupted extended rows produce different RLC values
+func testCorruptedDataDetection(t *testing.T, data [][]byte, config *Config) {
+	// 1. Extend the data using Reed-Solomon
+	extendedRows, err := encoding.ExtendVertical(data, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend data:", err)
+	}
+
+	// 2. Create dummy row root and derive coefficients
+	var dummyRowRoot [32]byte
+	if _, err := rand.Read(dummyRowRoot[:]); err != nil {
+		t.Fatal("Failed to generate dummy row root:", err)
+	}
+	coeffs := deriveCoefficients(dummyRowRoot, config)
+
+	// 3. Compute RLC values for original rows
+	rlcOrig := make([]field.GF128, config.K)
+	for i := 0; i < config.K; i++ {
+		rlcOrig[i] = computeRLC(data[i], coeffs, config)
+	}
+
+	// 4. Extend the RLC values using Reed-Solomon
+	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend RLC results:", err)
+	}
+
+	// 5. Test corruption detection for each extended row
+	for i := config.K; i < config.K+config.N; i++ {
+		// Create a copy of the extended row to corrupt
+		corruptedRow := make([]byte, len(extendedRows[i]))
+		copy(corruptedRow, extendedRows[i])
+
+		// Corrupt the row by flipping some bits (ensure we actually change something)
+		changed := false
+		for attempts := 0; attempts < 10 && !changed; attempts++ {
+			numCorruptions := mathrand.Intn(min(5, len(corruptedRow))) + 1 // 1-5 corruptions
+			for j := 0; j < numCorruptions; j++ {
+				pos := mathrand.Intn(len(corruptedRow))
+				// Flip a guaranteed different bit pattern
+				bitFlip := byte(1 << mathrand.Intn(8))
+				original := corruptedRow[pos]
+				corruptedRow[pos] ^= bitFlip
+				if corruptedRow[pos] != original {
+					changed = true
+				}
+			}
+		}
+
+		// Skip test if we couldn't make changes (very unlikely)
+		if !changed || bytes.Equal(corruptedRow, extendedRows[i]) {
+			fmt.Println("skipping row")
+			continue // Skip this row, try next one
+		}
+
+		// Compute RLC for the corrupted row
+		corruptedRLC := computeRLC(corruptedRow, coeffs, config)
+		expectedRLC := rlcExtended[i]
+
+		// CRITICAL: The corrupted row MUST produce a different RLC
+		if field.Equal128(corruptedRLC, expectedRLC) {
+			t.Errorf("SECURITY FAILURE: Corrupted row %d produced same RLC as original!\n"+
+				"Original row: %x\n"+
+				"Corrupted row: %x\n"+
+				"Expected RLC: %v\n"+
+				"Computed RLC: %v",
+				i, extendedRows[i][:min(32, len(extendedRows[i]))],
+				corruptedRow[:min(32, len(corruptedRow))],
+				expectedRLC, corruptedRLC)
+		}
+	}
+
+	// 6. Also test original row corruption detection
+	for i := 0; i < config.K; i++ {
+		// Create a copy of the original row to corrupt
+		corruptedRow := make([]byte, len(data[i]))
+		copy(corruptedRow, data[i])
+
+		// Corrupt the row
+		numCorruptions := mathrand.Intn(min(3, len(corruptedRow))) + 1
+		for j := 0; j < numCorruptions; j++ {
+			pos := mathrand.Intn(len(corruptedRow))
+			bitFlip := byte(1 << mathrand.Intn(8))
+			corruptedRow[pos] ^= bitFlip
+		}
+
+		// Skip if corruption didn't change anything
+		if bytes.Equal(corruptedRow, data[i]) {
+			continue
+		}
+
+		// Compute RLC for the corrupted original row
+		corruptedRLC := computeRLC(corruptedRow, coeffs, config)
+		expectedRLC := rlcOrig[i]
+
+		// The corrupted original row MUST produce a different RLC
+		if field.Equal128(corruptedRLC, expectedRLC) {
+			t.Errorf("SECURITY FAILURE: Corrupted original row %d produced same RLC as original!", i)
+		}
+	}
+}
+
+// FuzzCorruptionDetection is a dedicated fuzzer for testing corruption detection
+func FuzzCorruptionDetection(f *testing.F) {
+	// Seed the math/rand generator
+	mathrand.Seed(time.Now().UnixNano())
+
+	// Add seed corpus with various configurations
+	seedCases := []struct {
+		k                 int
+		n                 int
+		rowSize           int
+		corruptionPattern string
+	}{
+		{4, 4, 64, "single_bit"},
+		{3, 5, 128, "multiple_bits"},
+		{8, 8, 256, "byte_flip"},
+		{7, 9, 192, "random_positions"},
+	}
+
+	for _, tc := range seedCases {
+		f.Add(uint8(tc.k), uint8(tc.n), uint16(tc.rowSize), tc.corruptionPattern)
+	}
+
+	f.Fuzz(func(t *testing.T, kRaw uint8, nRaw uint8, rowSizeRaw uint16, pattern string) {
+		// Constrain parameters
+		k := max(1, min(int(kRaw), 50))
+		n := max(1, min(int(nRaw), 50))
+
+		if k+n > 1000 { // Keep it smaller for corruption testing
+			n = min(n, 1000-k)
+		}
+
+		rowSize := max(64, int(rowSizeRaw))
+		rowSize = (rowSize / 64) * 64
+		rowSize = min(rowSize, 1024) // Smaller for focused corruption testing
+
+		config := &Config{
+			K:           k,
+			N:           n,
+			RowSize:     rowSize,
+			WorkerCount: 1,
+		}
+
+		if err := config.Validate(); err != nil {
+			t.Skip("Invalid config:", err)
+		}
+
+		// Generate random test data
+		data := make([][]byte, k)
+		for i := 0; i < k; i++ {
+			data[i] = make([]byte, rowSize)
+			if _, err := rand.Read(data[i]); err != nil {
+				t.Fatal("Failed to generate random data:", err)
+			}
+		}
+
+		// Test corruption detection with different patterns
+		testCorruptionPatterns(t, data, config, pattern)
+	})
+}
+
+// testCorruptionPatterns tests various corruption patterns to ensure detection
+func testCorruptionPatterns(t *testing.T, data [][]byte, config *Config, pattern string) {
+	// Extend the data
+	extendedRows, err := encoding.ExtendVertical(data, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend data:", err)
+	}
+
+	// Create dummy row root and derive coefficients
+	var dummyRowRoot [32]byte
+	rand.Read(dummyRowRoot[:])
+	coeffs := deriveCoefficients(dummyRowRoot, config)
+
+	// Compute and extend RLC values
+	rlcOrig := make([]field.GF128, config.K)
+	for i := 0; i < config.K; i++ {
+		rlcOrig[i] = computeRLC(data[i], coeffs, config)
+	}
+
+	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
+	if err != nil {
+		t.Fatal("Failed to extend RLC results:", err)
+	}
+
+	// Test corruption on one random extended row
+	if config.N == 0 {
+		return // Skip if no extended rows
+	}
+
+	targetRow := config.K + mathrand.Intn(config.N)
+	corruptedRow := make([]byte, len(extendedRows[targetRow]))
+	copy(corruptedRow, extendedRows[targetRow])
+
+	// Apply corruption pattern
+	switch pattern {
+	case "single_bit":
+		// Flip a single bit
+		pos := mathrand.Intn(len(corruptedRow))
+		bitPos := mathrand.Intn(8)
+		corruptedRow[pos] ^= (1 << bitPos)
+
+	case "multiple_bits":
+		// Flip multiple bits in the same byte
+		pos := mathrand.Intn(len(corruptedRow))
+		mask := byte(mathrand.Intn(256))
+		if mask == 0 {
+			mask = 1
+		} // Ensure we change something
+		corruptedRow[pos] ^= mask
+
+	case "byte_flip":
+		// Completely flip one or more bytes
+		numBytes := mathrand.Intn(min(4, len(corruptedRow))) + 1
+		for i := 0; i < numBytes; i++ {
+			pos := mathrand.Intn(len(corruptedRow))
+			corruptedRow[pos] = byte(mathrand.Intn(256))
+		}
+
+	default: // "random_positions" or unknown
+		// Corrupt random positions
+		numCorruptions := mathrand.Intn(min(8, len(corruptedRow))) + 1
+		for i := 0; i < numCorruptions; i++ {
+			pos := mathrand.Intn(len(corruptedRow))
+			corruptedRow[pos] ^= byte(mathrand.Intn(256)) | 1 // Ensure at least 1 bit changes
+		}
+	}
+
+	// Skip test if no actual corruption occurred
+	if bytes.Equal(corruptedRow, extendedRows[targetRow]) {
+		t.Skip("No corruption applied")
+	}
+
+	// Verify corruption is detected
+	originalRLC := rlcExtended[targetRow]
+	corruptedRLC := computeRLC(corruptedRow, coeffs, config)
+
+	if field.Equal128(originalRLC, corruptedRLC) {
+		t.Errorf("CRITICAL: %s corruption not detected in row %d!", pattern, targetRow)
+		t.Logf("Original:  %x", extendedRows[targetRow][:min(16, len(extendedRows[targetRow]))])
+		t.Logf("Corrupted: %x", corruptedRow[:min(16, len(corruptedRow))])
+		t.Logf("Original RLC:  %v", originalRLC)
+		t.Logf("Corrupted RLC: %v", corruptedRLC)
+	}
+}
