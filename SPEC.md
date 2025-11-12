@@ -298,7 +298,7 @@ MapIndexToTreePosition(index, K):
      ```
 
    - **Note**: No additional proof needed. The verifier will extend these K values
-     to K+N values and verify against the committed rlcOrigRoot
+     to K+N values if needed, and verify the original K values against the committed `rlcOrigRoot`.
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
