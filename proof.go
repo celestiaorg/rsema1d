@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math/bits"
 
 	"github.com/celestiaorg/rsema1d/encoding"
 	"github.com/celestiaorg/rsema1d/field"
@@ -12,38 +13,57 @@ import (
 
 // CreateVerificationContext initializes context with RLC original values
 // Used for DA sampling with multiple proofs
-func CreateVerificationContext(rlcOrig []field.GF128, config *Config) (*VerificationContext, error) {
+// Returns the verification context, RLC root, and error
+func CreateVerificationContext(rlcOrig []field.GF128, config *Config) (*VerificationContext, [32]byte, error) {
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, [32]byte{}, fmt.Errorf("invalid config: %w", err)
 	}
 
 	if len(rlcOrig) != config.K {
-		return nil, fmt.Errorf("expected %d RLC values, got %d", config.K, len(rlcOrig))
+		return nil, [32]byte{}, fmt.Errorf("expected %d RLC values, got %d", config.K, len(rlcOrig))
 	}
 
 	// Extend RLC results to get all K+N values
 	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extend RLC results: %w", err)
+		return nil, [32]byte{}, fmt.Errorf("failed to extend RLC results: %w", err)
 	}
 
 	// Build padded RLC Merkle tree
 	rlcTree := buildPaddedRLCTree(rlcExtended, config)
 
+	rlcRoot := rlcTree.Root()
 	return &VerificationContext{
 		config:      config,
 		rlcOrig:     rlcOrig,
 		rlcExtended: rlcExtended,
 		rlcTree:     rlcTree,
-		rlcRoot:     rlcTree.Root(),
-	}, nil
+		rlcRoot:     rlcRoot,
+	}, rlcRoot, nil
 }
 
 // VerifyRowWithContext verifies a row proof using pre-initialized context
 // Efficient for multiple verifications with same commitment
 func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *VerificationContext) error {
+	if proof == nil || context == nil {
+		return fmt.Errorf("received nil proof or context in verifier")
+	}
+
 	if proof.Index < 0 || proof.Index >= context.config.K+context.config.N {
 		return fmt.Errorf("index %d out of range [0, %d)", proof.Index, context.config.K+context.config.N)
+	}
+
+	// The row size must match the config
+	if len(proof.Row) != context.config.RowSize {
+		return fmt.Errorf("row size mismatch: expected %d, got %d", context.config.RowSize, len(proof.Row))
+	}
+
+	// The row proof depth must match the tree depth
+	kPadded := nextPowerOfTwo(context.config.K)
+	totalPadded := nextPowerOfTwo(kPadded + context.config.N)
+	treeDepth := bits.Len(uint(totalPadded)) - 1
+	if len(proof.RowProof) != treeDepth {
+		return fmt.Errorf("row proof depth mismatch: expected %d, got %d", treeDepth, len(proof.RowProof))
 	}
 
 	// 1. Compute row root from proof (using mapped tree position)
@@ -83,12 +103,31 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 // VerifyStandaloneProof verifies a self-contained proof without context
 // Best for single row verification without downloading RLC orig
 func VerifyStandaloneProof(proof *StandaloneProof, commitment Commitment, config *Config) error {
+	if proof == nil {
+		return fmt.Errorf("received nil proof in verifier")
+	}
+	if proof.Index < 0 {
+		return fmt.Errorf("negative proof index not allowed: %d", proof.Index)
+	}
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
 
 	if proof.Index >= config.K {
 		return errors.New("standalone verification only supports original rows")
+	}
+
+	// The row size must match the config
+	if len(proof.Row) != config.RowSize {
+		return fmt.Errorf("row size mismatch: expected %d, got %d", config.RowSize, len(proof.Row))
+	}
+
+	// The row proof depth must match the tree depth
+	kPadded := nextPowerOfTwo(config.K)
+	totalPadded := nextPowerOfTwo(kPadded + config.N)
+	treeDepth := bits.Len(uint(totalPadded)) - 1
+	if len(proof.RLCProof) != treeDepth {
+		return fmt.Errorf("row proof depth mismatch: expected %d, got %d", treeDepth, len(proof.RLCProof))
 	}
 
 	// 1. Compute row root (index < K so no shift needed for tree position)
@@ -112,6 +151,38 @@ func VerifyStandaloneProof(proof *StandaloneProof, commitment Commitment, config
 	h := sha256.New()
 	h.Write(rowRoot[:])
 	h.Write(rlcRoot[:])
+	computedCommitment := h.Sum(nil)
+
+	if commitment != [32]byte(computedCommitment) {
+		return errors.New("commitment verification failed")
+	}
+
+	return nil
+}
+
+// VerifyRowInclusionProof verifies that a row is included in the commitment.
+// Works for both original and parity rows without requiring rlcOrig.
+// Only verifies inclusion, not RLC correctness.
+func VerifyRowInclusionProof(proof *RowInclusionProof, commitment Commitment, config *Config) error {
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	if proof.Index < 0 || proof.Index >= config.K+config.N {
+		return fmt.Errorf("index %d out of range [0, %d)", proof.Index, config.K+config.N)
+	}
+
+	// 1. Compute row root from proof (using mapped tree position)
+	treeIndex := mapIndexToTreePosition(proof.Index, config)
+	rowRoot, err := merkle.ComputeRootFromProof(proof.Row, treeIndex, proof.RowProof.RowProof)
+	if err != nil {
+		return fmt.Errorf("failed to compute row root: %w", err)
+	}
+
+	// 2. Verify commitment: SHA256(rowRoot || rlcRoot)
+	h := sha256.New()
+	h.Write(rowRoot[:])
+	h.Write(proof.RLCRoot[:])
 	computedCommitment := h.Sum(nil)
 
 	if commitment != [32]byte(computedCommitment) {
