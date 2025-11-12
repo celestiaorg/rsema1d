@@ -55,6 +55,13 @@ RSEMA1D (Reed-Solomon Evans-Mohnblatt-Angeris 1D) is a data availability codec t
 - **Efficient verification**: O(K) operations for verifying extended rows, O(log K) for original rows
 - **128-bit security**: Using GF(2^128) for random linear combinations against RLC forgery
 
+### Notation Conventions
+
+**Iterator Ranges**: All iterators in this specification use exclusive notation. Ranges like `0..K` imply that the target (`K`) is excluded and the initial value (`0`) is included. For example:
+
+- `0..K` iterates over values 0, 1, 2, ..., K-1
+- `K..K_padded` iterates over values K, K+1, ..., K_padded-1
+
 ## 2. Mathematical Foundations
 
 ### 2.1 Field Definitions
@@ -153,37 +160,47 @@ For Merkle tree construction, padding is applied to achieve power-of-2 sizes:
 **Helper Functions:**
 
 ```text
-// BuildPaddedRowArray creates a padded array for row tree construction
-BuildPaddedRowArray(rows, K, N):
-    K_padded = nextPowerOfTwo(K)
-    total_padded = nextPowerOfTwo(K_padded + N)
-    paddedRows = new array[total_padded]
-    zeroRow = new byte[rowSize]
+// BuildPaddedRowTree creates a padded tree for extended row data
+BuildPaddedRowTree(rowExtended, K, N):
+   zeroRow = new byte[RowSize]
+   paddedRows = new array[totalPadded]
+   # Fill paddedRows with: [original | padding | extended | padding]
 
-    paddedRows[0..K] = rows[0..K]                          // Original rows
-    paddedRows[K..K_padded] = zeroRow                      // Padding
-    paddedRows[K_padded..K_padded+N] = rows[K..K+N]       // Extended rows
-    paddedRows[K_padded+N..total_padded] = zeroRow        // Padding
+   # 1. Original rows
+   for i in 0 .. K:
+      paddedRows[i] = extended[i]
 
-    return paddedRows
+   # 2. Padding after original rows, up to K_padded
+   for i in K .. K_padded:
+      paddedRows[i] = zeroRow
 
-// BuildPaddedRLCArray creates a padded array for RLC tree construction
-BuildPaddedRLCArray(rlcExtended, K, N):
-    K_padded = nextPowerOfTwo(K)
-    total_padded = nextPowerOfTwo(K_padded + N)
-    paddedRLCLeaves = new array[total_padded]
-    zeroRLC = new byte[16]
+   # 3. Extended rows
+   for i in K_padded .. K_padded + N:
+      indexIntoExtended = K + (i - K_padded)
+      paddedRows[i] = extended[indexIntoExtended]
 
-    for i in 0..K:
-        paddedRLCLeaves[i] = Serialize(rlcExtended[i])
-    for i in K..K_padded:
-        paddedRLCLeaves[i] = zeroRLC
-    for i in K_padded..K_padded+N:
-        paddedRLCLeaves[i] = Serialize(rlcExtended[K+(i-K_padded)])
-    for i in K_padded+N..total_padded:
-        paddedRLCLeaves[i] = zeroRLC
+   # 4. Final padding
+   for i in K_padded + N .. totalPadded:
+      paddedRows[i] = zeroRow
 
-    return paddedRLCLeaves
+   return MerkleTree(paddedRows, WorkerCount)
+
+// BuildPaddedRLCTree creates a padded tree from RLC data
+BuildPaddedRLCTree(rlcOrig, K):
+   K_padded     = nextPowerOfTwo(K)
+   paddedRLCLeaves = new array[K_padded]
+   zeroRLC         = new byte[16]
+
+   # 1. Original RLC rows
+   for i in 0 .. K:
+      paddedRLCLeaves[i] = Serialize(rlcOrig[i])
+
+   # 2. Padding up to K_padded
+   for i in K .. K_padded:
+      paddedRLCLeaves[i] = zeroRLC
+
+return MerkleTree(paddedRLCLeaves, WorkerCount)
+
 
 // MapIndexToTreePosition maps actual index to padded tree position
 MapIndexToTreePosition(index, K):
@@ -192,7 +209,7 @@ MapIndexToTreePosition(index, K):
         return index
     else:
         return K_padded + (index - K)
-```text
+```
 
 **Input**: Extended data (K+N rows)
 
@@ -200,11 +217,10 @@ MapIndexToTreePosition(index, K):
 
 1. **Compute Row Root**
 
-   ```text
-   paddedRows = BuildPaddedRowArray(rows, K, N)
-   rowTree = MerkleTree(paddedRows)
-   rowRoot = rowTree.root()
-   ```
+    ```text
+    rowTree = BuildPaddedRowTree(rows, K, N)
+    rowRoot = rowTree.root()
+    ```
 
 1. **Derive RLC Coefficients**
 
@@ -216,6 +232,7 @@ MapIndexToTreePosition(index, K):
    ```
 
    Where HashToGF128 converts a 32-byte hash to a GF128 element by:
+
    - Taking bytes 0-15 as 8 little-endian uint16 values
    - Taking bytes 16-31 as 8 little-endian uint16 values
    - XORing corresponding pairs to produce final 8 GF(2^16) values
@@ -233,41 +250,24 @@ MapIndexToTreePosition(index, K):
                rlc[i] += symbols[j] * coeffs[symbolIndex]  // GF16 × GF128
    ```
 
-1. **Extend RLC Results**
-
-   ```text
-   // Each GF128 value is 8 GF16 symbols
-   // Pack into Leopard format: 64-byte shards with first 8 symbols as RLC, 24 zeros
-   for i in 0..K:
-       shard[i] = PackGF128ToLeopard(rlc[i])  // See Appendix B.2
-
-   // Apply RS encoding to generate N parity shards
-   extendedShards = LeopardExtend(shard[0..K], K, N)
-
-   // Unpack GF128 values from extended shards
-   for i in 0..(K+N):
-       rlcExtended[i] = UnpackGF128FromLeopard(extendedShards[i])
-   ```
-
 1. **Compute RLC Root**
 
    ```text
-   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
-   rlcTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcTree.root()
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 1. **Final Commitment**
 
    ```text
-   commitment = SHA256(rowRoot || rlcRoot)
+   commitment = SHA256(rowRoot || rlcOrigRoot)
    ```
 
 **Output**:
 
 - `commitment`: 32-byte commitment
 - `rowRoot`: 32-byte Merkle root of rows (tree built directly over row data)
-- `rlcRoot`: 32-byte Merkle root of RLC results
+- `rlcOrigRoot`: 32-byte Merkle root of RLC results
 
 ### 3.4 Proof Generation
 
@@ -298,13 +298,13 @@ MapIndexToTreePosition(index, K):
      ```
 
    - **Note**: No additional proof needed. The verifier will extend these K values
-     to K+N values and compute the rlcRoot directly.
+     to K+N values if needed, and verify the original K values against the committed `rlcOrigRoot`.
 
 4. **For Original Rows (i < K):**
    - **Generate RLC Merkle Proof**
 
      ```text
-     proof.rlcProof = rlcTree.generateProof(i)  // Same position as in padded tree
+     proof.rlcProof = rlcOrigTree.generateProof(i)  // Same position as in padded tree
      ```
 
 **Output**: Proof containing:
@@ -312,12 +312,12 @@ MapIndexToTreePosition(index, K):
 - `index`: Row index
 - `row`: Row data (rowSize bytes)
 - `rowProof`: Merkle proof for row (log2(K+N) × 32 bytes)
-- For extended rows (i ≥ K):
+- For extended rows (i ≥ K), where verifier must extend themselves:
 
   - `rlcOrig`: Original RLC results (K × 16 bytes)
 - For original rows (i < K):
 
-  - `rlcProof`: Merkle proof for RLC result (log2(K+N) × 32 bytes)
+  - `rlcProof`: Merkle proof for original RLC result (log2(K) × 32 bytes)
 
 **Implementor's Note on Proof Optimization:**
 
@@ -325,7 +325,7 @@ In practice, proof transmission can be optimized based on the verification conte
 
 1. **When verifier already has `rlcOrig`** (e.g., data availability sampling where verifier downloads `rlcOrig` once and verifies multiple rows):
    - For extended rows: No need to send `rlcOrig` in each proof
-   - For original rows: No need to send `rlcProof` (verifier can compute `rlcRoot` from their copy of `rlcOrig`)
+   - For original rows: No need to send `rlcProof` (verifier can compute `rlcOrigRoot` from their copy of `rlcOrig`)
    - Only send: `index`, `row`, and `rowProof`
 
 2. **When verifier doesn't have `rlcOrig`** (e.g., single original row read by a rollup):
@@ -367,29 +367,28 @@ This optimization can significantly reduce proof sizes, especially for extended 
    ```text
    // Compute RLC root from proof
    rlcBytes = Serialize(rlcI)  // Convert to 16 bytes
-   rlcRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
+   rlcOrigRoot = ComputeRootFromProof(rlcBytes, proof.index, proof.rlcProof)
    ```
 
 4. **For Extended Rows (proof.index ≥ K):**
 
    ```text
-   // Extend the K original RLC values to get all K+N values
-   rlcExtended = LeopardExtend(proof.rlcOrig, K, N)
-
-   // Verify the computed RLC matches the extended value
+   // Extend original RLC values to verify extended row
+   rlcExtended = ExtendRLCResults(proof.rlcOrig, N)
+   
+   // Verify computed RLC matches extended value
    assert rlcI == rlcExtended[proof.index]
-
-   // Build the padded RLC tree
-   paddedRLCLeaves = BuildPaddedRLCArray(rlcExtended, K, N)
-   rlcTree = MerkleTree(paddedRLCLeaves)
-   rlcRoot = rlcTree.root()
+   
+   // Compute RLC root from original values
+   rlcOrigTree = BuildPaddedRLCTree(proof.rlcOrig, K)
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
 5. **Verify Final Commitment**
 
    ```text
-   // Verify the commitment matches SHA256(rowRoot || rlcRoot)
-   computedCommitment = SHA256(rowRoot || rlcRoot)
+   // Verify the commitment matches SHA256(rowRoot || rlcOrigRoot)
+   computedCommitment = SHA256(rowRoot || rlcOrigRoot)
    assert computedCommitment == commitment
    ```
 
@@ -459,7 +458,7 @@ Row 3: 0x00000000000000000000000000000000000000000000000000000000000000000000000
 **Expected commitment**:
 
 ```text
-0xa71c1e91387fc13003c3bb3891ab1dbe3fd00ddec2223064a5542f1e70ead50d
+0x9f637574ecb67828c5ce7589a0a6ce139ccad3bea8e92d22d9e28fde83a905e7
 ```
 
 ### 6.2 Test Vector 2: K=3, N=9, rowSize=256
@@ -475,7 +474,7 @@ Row 2: 0x00...(255 zero bytes)...03
 **Expected commitment**:
 
 ```text
-0x4df24d6b09fe07061a6835405c86eca4176c447592e487d4317f667452c05775
+0x2d67c13aa6a5c0be41b7e84f36188562c64ff3547ce74ffd410ab1afa7897f22
 ```
 
 ### 6.3 Verification Test Cases
@@ -668,18 +667,10 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
    bulkProof.rowOrigProof = GenerateLeftSubtreeProof(rowTree, K)
    ```
 
-1. **Generate RLC Original Subtree Proof**
-   Similarly, the first K RLC values form a complete binary subtree.
-
-   ```text
-   bulkProof.rlcOrigProof = GenerateLeftSubtreeProof(rlcTree, K)
-   ```
-
 **Output**: Bulk proof containing:
 
 - `rowsOrig`: All K original rows (K × rowSize bytes)
 - `rowOrigProof`: Sibling roots to prove K-row subtree is in (K+N)-row tree (≤ log2(K+N) × 32 bytes)
-- `rlcOrigProof`: Sibling roots to prove K-RLC subtree is in (K+N)-RLC tree (≤ log2(K+N) × 32 bytes)
 
 #### C.2.2 Bulk Proof Verification
 
@@ -690,7 +681,8 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
 1. **Compute Row Original Subtree Root**
 
    ```text
-   rowOrigRoot = MerkleRoot(bulkProof.rowsOrig[0..K])  // Build tree directly over rows
+   rowOrigTree = BuildPaddedRowTree(rowOrig, K)
+   rowRoot = rowOrigTree.root()
    ```
 
 2. **Verify Row Original Subtree is Part of Full Tree**
@@ -707,23 +699,17 @@ For applications that need to retrieve all K original rows (e.g., rollups downlo
        rlcOrig[i] = ComputeRLC(bulkProof.rowsOrig[i], coeffs)
    ```
 
-4. **Compute RLC Original Subtree Root**
+4. **Compute Original RLC Root**
 
    ```text
-   rlcLeaves = Serialize(rlcOrig)  // Computed from rows
-   rlcOrigRoot = MerkleRoot(rlcLeaves)
+   rlcOrigTree = BuildPaddedRLCTree(rlcOrig, K)
+   rlcOrigRoot = rlcOrigTree.root()
    ```
 
-5. **Verify RLC Original Subtree is Part of Full Tree**
+5. **Verify Final Commitment**
 
    ```text
-   rlcRoot = ComputeRootFromLeftSubtreeProof(rlcOrigRoot, bulkProof.rlcOrigProof)
-   ```
-
-6. **Verify Final Commitment**
-
-   ```text
-   computedCommitment = SHA256(rowRoot || rlcRoot)
+   computedCommitment = SHA256(rowRoot || rlcOrigRoot)
    assert computedCommitment == commitment
    ```
 
@@ -776,11 +762,12 @@ GenerateLeftSubtreeProof(tree, K):
         currentSize = currentSize * 2
 
     return proof
-```text
+```
 
 Note: Since the tree is padded to K_padded, the proof starts from the K_padded subtree boundary.
 
 ### Example 1: K=4, N=4 (8 total leaves)
+
 ```text
                      Root_0-7
                     /        \
@@ -793,10 +780,12 @@ Note: Since the tree is padded to K_padded, the proof starts from the K_padded s
       L0    L1  L2    L3  L4   L5   L6   L7
       └──────┬──────┘    └──────┬──────┘
          K original         N extended
-```text
+```
+
 Returns: [Root_4-7]
 
 ### Example 2: K=4, N=12 (16 total leaves)
+
 ```text
                               Root_0-15
                             /            \
@@ -813,18 +802,21 @@ Returns: [Root_4-7]
     L0    L1  L2    L3
     └──────┬──────┘
        K original
-```text
+```
+
 Returns: [Root_4-7, Root_8-15]
 
 #### C.3.2 ComputeRootFromLeftSubtreeProof
+
 Computes the full tree root given a left subtree root and sibling subtree roots.
 
 **Input**:
+
 - `leftSubtreeRoot`: Root of the leftmost K leaves
 - `siblingRoots`: Array of sibling subtree roots from GenerateLeftSubtreeProof
 
-
 **Algorithm**:
+
 ```text
 ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
     currentRoot = leftSubtreeRoot
@@ -834,9 +826,10 @@ ComputeRootFromLeftSubtreeProof(leftSubtreeRoot, siblingRoots):
         currentRoot = SHA256(currentRoot || siblingRoot)
 
     return currentRoot
-```text
+```
 
 **Visual Example (K=4, N=12)**:
+
 ```text
 Initial state:
     leftSubtreeRoot = Root_0-3
@@ -855,4 +848,4 @@ Step 2: Combine Root_0-7 with Root_8-15
          (step 1)      (proof[1])
 
 Final: Root_0-15
-```text
+```
