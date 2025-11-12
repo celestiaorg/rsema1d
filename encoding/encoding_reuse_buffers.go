@@ -34,8 +34,8 @@ func ExtendVerticalWithReuseBuffers(data [][]byte, n int, shards [][]byte) ([][]
 		return nil, fmt.Errorf("reuseBuffers shards must have size k+n=%d, got %d", k+n, len(shards))
 	}
 	for i, shard := range shards {
-		if len(shard) != rowSize {
-			return nil, fmt.Errorf("reuseBuffers shard %d has size %d, expected %d", i, len(shard), rowSize)
+		if len(shard) < rowSize {
+			return nil, fmt.Errorf("reuseBuffers shard %d has size %d, need at least %d", i, len(shard), rowSize)
 		}
 	}
 
@@ -43,6 +43,11 @@ func ExtendVerticalWithReuseBuffers(data [][]byte, n int, shards [][]byte) ([][]
 	enc, err := reedsolomon.New(k, n, reedsolomon.WithLeopardGF16(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create encoder: %w", err)
+	}
+
+	// Sub-slice shards to exactly rowSize bytes (capacity is preserved)
+	for i := range shards {
+		shards[i] = shards[i][:rowSize]
 	}
 
 	// Copy data rows into reuseBuffers
@@ -62,7 +67,7 @@ func ExtendVerticalWithReuseBuffers(data [][]byte, n int, shards [][]byte) ([][]
 		return nil, fmt.Errorf("failed to encode: %w", err)
 	}
 
-	// Return all shards (original + parity)
+	// Return sub-slices (original + parity)
 	return shards, nil
 }
 
