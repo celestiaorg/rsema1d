@@ -49,24 +49,6 @@ func NewVerifierReuseBuffers(config *Config) (*VerifierReuseBuffers, error) {
 	}, nil
 }
 
-// Reset clears the buffers in the reuseBuffers (zeroes them out).
-func (w *VerifierReuseBuffers) Reset() {
-	// Clear coefficient buffer
-	for i := range w.coeffsBuf {
-		w.coeffsBuf[i] = field.Zero()
-	}
-
-	// Clear merkle buffers
-	for i := range w.merkleProofBuf {
-		for j := range w.merkleProofBuf[i] {
-			w.merkleProofBuf[i][j] = 0
-		}
-	}
-
-	w.leafHashBuf = w.leafHashBuf[:0]
-	w.innerHashBuf = w.innerHashBuf[:0]
-}
-
 // NewVerifierReuseBuffersPool creates a pool of verifier reuse buffers for concurrent operations.
 func NewVerifierReuseBuffersPool(config *Config, poolSize int) (*VerifierReuseBuffersPool, error) {
 	if poolSize < 1 {
@@ -144,21 +126,4 @@ func NewEncoderReuseBuffers(config *Config) (*EncoderReuseBuffers, error) {
 		shards:    shards,
 		rlcShards: rlcShards,
 	}, nil
-}
-
-// Reset clears the buffers in the reuseBuffers (zeroes them out).
-func (w *EncoderReuseBuffers) Reset() {
-	// Clear shard buffers
-	for i := range w.shards {
-		for j := range w.shards[i] {
-			w.shards[i][j] = 0
-		}
-	}
-
-	// Clear RLC shard buffers
-	for i := range w.rlcShards {
-		for j := range w.rlcShards[i] {
-			w.rlcShards[i][j] = 0
-		}
-	}
 }

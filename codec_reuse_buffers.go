@@ -18,8 +18,16 @@ func EncodeWithReuseBuffers(data [][]byte, config *Config, reuseBuffers *Encoder
 		return nil, Commitment{}, nil, fmt.Errorf("reuseBuffers cannot be nil")
 	}
 
-	if reuseBuffers.config.K != config.K || reuseBuffers.config.N != config.N || reuseBuffers.config.RowSize != config.RowSize {
-		return nil, Commitment{}, nil, fmt.Errorf("reuseBuffers config mismatch")
+	// Allow buffers with larger capacity (K+N) - more flexible for varying blob sizes
+	bufferTotalRows := reuseBuffers.config.K + reuseBuffers.config.N
+	actualTotalRows := config.K + config.N
+	if bufferTotalRows < actualTotalRows {
+		return nil, Commitment{}, nil, fmt.Errorf("reuseBuffers too small: buffer K+N=%d < required K+N=%d", bufferTotalRows, actualTotalRows)
+	}
+
+	// Allow buffers with RowSize >= actual row size (can use larger buffers for smaller rows)
+	if reuseBuffers.config.RowSize < config.RowSize {
+		return nil, Commitment{}, nil, fmt.Errorf("reuseBuffers too small: buffer RowSize=%d < required RowSize=%d", reuseBuffers.config.RowSize, config.RowSize)
 	}
 
 	if len(data) != config.K {
@@ -193,8 +201,16 @@ func ReconstructWithReuseBuffers(rows [][]byte, indices []int, config *Config, r
 		return nil, fmt.Errorf("reuseBuffers cannot be nil")
 	}
 
-	if reuseBuffers.config.K != config.K || reuseBuffers.config.N != config.N || reuseBuffers.config.RowSize != config.RowSize {
-		return nil, fmt.Errorf("reuseBuffers config mismatch")
+	// Allow buffers with larger capacity (K+N) - more flexible for varying blob sizes
+	bufferTotalRows := reuseBuffers.config.K + reuseBuffers.config.N
+	actualTotalRows := config.K + config.N
+	if bufferTotalRows < actualTotalRows {
+		return nil, fmt.Errorf("reuseBuffers too small: buffer K+N=%d < required K+N=%d", bufferTotalRows, actualTotalRows)
+	}
+
+	// Allow buffers with RowSize >= actual row size (can use larger buffers for smaller rows)
+	if reuseBuffers.config.RowSize < config.RowSize {
+		return nil, fmt.Errorf("reuseBuffers too small: buffer RowSize=%d < required RowSize=%d", reuseBuffers.config.RowSize, config.RowSize)
 	}
 
 	return encoding.ReconstructWithReuseBuffers(rows, indices, config.K, config.N, reuseBuffers.shards)
