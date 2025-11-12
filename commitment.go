@@ -23,7 +23,7 @@ func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
 	coeffs := make([]field.GF128, numSymbols)
 
 	var input [32 + 4]byte
-	copy(input[:32], seed[:])
+	copy(input[:32], seed)
 	for i := 0; i < numSymbols; i++ {
 		binary.LittleEndian.PutUint32(input[32:], uint32(i))
 		digest := sha256.Sum256(input[:])
