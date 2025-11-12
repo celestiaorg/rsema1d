@@ -41,6 +41,43 @@ func CreateVerificationContext(rlcOrig []field.GF128, config *Config) (*Verifica
 	}, rlcOrigRoot, nil
 }
 
+// ensureRowRootCaches lazily populates the row-root dependent caches on the
+// verification context. It guarantees that the Fiat-Shamir coefficients and
+// commitment hash are derived at most once per context, even when multiple rows
+// are verified concurrently.
+func (context *VerificationContext) ensureRowRootCaches(rowRoot [32]byte, commitment Commitment) error {
+	var onceErr error
+	context.cacheOnce.Do(func() {
+		context.cachedRowRoot = rowRoot
+		context.coeffs = deriveCoefficients(rowRoot, context.config)
+
+		h := sha256.New()
+		h.Write(rowRoot[:])
+		h.Write(context.rlcOrigRoot[:])
+		var cached Commitment
+		copy(cached[:], h.Sum(nil))
+		context.cachedCommitment = cached
+		if cached != commitment {
+			onceErr = errors.New("commitment verification failed")
+		}
+	})
+
+	if onceErr != nil {
+		return onceErr
+	}
+	if context.cachedRowRoot != rowRoot {
+		return errors.New("row root mismatch in verification context")
+	}
+	if context.cachedCommitment != commitment {
+		return errors.New("commitment verification failed")
+	}
+	if context.coeffs == nil {
+		return errors.New("verification coefficients not initialized")
+	}
+
+	return nil
+}
+
 // VerifyRowWithContext verifies a row proof using pre-initialized context
 // Efficient for multiple verifications with same commitment
 func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *VerificationContext) error {
@@ -72,11 +109,16 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return fmt.Errorf("failed to compute row root: %w", err)
 	}
 
-	// 2. Derive coefficients and compute RLC for the row
-	coeffs := deriveCoefficients(rowRoot, context.config)
-	computedRLC := computeRLC(proof.Row, coeffs)
+	// 2. Initialize and reuse cached coefficients & commitment derived from the
+	// first reconstructed row root.
+	if err := context.ensureRowRootCaches(rowRoot, commitment); err != nil {
+		return err
+	}
 
-	// 3. Verify RLC matches the extended value at this index
+	// 3. Compute RLC with cached coefficients (no SHA-256 per symbol).
+	computedRLC := computeRLC(proof.Row, context.coeffs)
+
+	// 4. Verify RLC matches the extended value at this index
 	if proof.Index >= len(context.rlcExtended) {
 		return fmt.Errorf("index %d out of range", proof.Index)
 	}
@@ -86,15 +128,8 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return errors.New("computed RLC does not match expected value")
 	}
 
-	// 4. Verify commitment
-	h := sha256.New()
-	h.Write(rowRoot[:])
-	h.Write(context.rlcOrigRoot[:])
-	computedCommitment := h.Sum(nil)
-
-	if commitment != [32]byte(computedCommitment) {
-		return errors.New("commitment verification failed")
-	}
+	// 5. Commitment already verified & cached in ensureRowRootCaches. Nothing
+	// else to do here.
 
 	return nil
 }

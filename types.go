@@ -1,6 +1,8 @@
 package rsema1d
 
 import (
+	"sync"
+
 	"github.com/celestiaorg/rsema1d/field"
 	"github.com/celestiaorg/rsema1d/merkle"
 )
@@ -27,7 +29,13 @@ type VerificationContext struct {
 	config      *Config
 	rlcOrig     []field.GF128 // Original K RLC values
 	rlcExtended []field.GF128 // Extended K+N RLC values
-	rlcOrigRoot [32]byte      // Cached RLC root
+	rlcOrigRoot [32]byte      // Cached RLC root1
+
+	rlcTree          *merkle.Tree // Precomputed RLC Merkle tree
+	cacheOnce        sync.Once
+	coeffs           []field.GF128
+	cachedRowRoot    [32]byte
+	cachedCommitment Commitment
 }
 
 // RowProof is a lightweight proof without RLC data
