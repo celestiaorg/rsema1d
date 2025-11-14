@@ -34,6 +34,7 @@ type VerificationContext struct {
 	cacheOnce        sync.Once
 	coeffs           []field.GF128
 	cachedCommitment Commitment
+	cachedRowRoot    [32]byte
 }
 
 // RowProof is a lightweight proof without RLC data

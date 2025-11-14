@@ -76,6 +76,7 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 	// first reconstructed row root.
 	context.cacheOnce.Do(func() {
 		context.coeffs = deriveCoefficients(rowRoot, context.config)
+		context.cachedRowRoot = rowRoot
 
 		h := sha256.New()
 		h.Write(rowRoot[:])
@@ -94,6 +95,10 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 
 	if context.cachedCommitment != commitment {
 		return errors.New("commitment verification failed")
+	}
+
+	if context.cachedRowRoot != rowRoot {
+		return errors.New("row root mismatch with cached value")
 	}
 
 	// 3. Compute RLC with cached coefficients (no SHA-256 per symbol).
