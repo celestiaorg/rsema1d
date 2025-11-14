@@ -29,7 +29,7 @@ type VerificationContext struct {
 	config      *Config
 	rlcOrig     []field.GF128 // Original K RLC values
 	rlcExtended []field.GF128 // Extended K+N RLC values
-	rlcOrigRoot [32]byte      // Cached RLC root1
+	rlcOrigRoot [32]byte      // Cached RLC root
 
 	cacheOnce        sync.Once
 	coeffs           []field.GF128
