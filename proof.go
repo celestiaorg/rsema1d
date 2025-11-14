@@ -109,7 +109,7 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return errors.New("computed RLC does not match expected value")
 	}
 
-	// 5. Commitment already verified & cached in ensureRowRootCaches. Nothing
+	// 5. Commitment already verified & cached in the cacheOnce.Do block above. Nothing
 	// else to do here.
 
 	return nil
