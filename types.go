@@ -31,10 +31,8 @@ type VerificationContext struct {
 	rlcExtended []field.GF128 // Extended K+N RLC values
 	rlcOrigRoot [32]byte      // Cached RLC root1
 
-	rlcTree          *merkle.Tree // Precomputed RLC Merkle tree
 	cacheOnce        sync.Once
 	coeffs           []field.GF128
-	cachedRowRoot    [32]byte
 	cachedCommitment Commitment
 }
 

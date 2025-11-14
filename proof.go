@@ -41,43 +41,6 @@ func CreateVerificationContext(rlcOrig []field.GF128, config *Config) (*Verifica
 	}, rlcOrigRoot, nil
 }
 
-// ensureRowRootCaches lazily populates the row-root dependent caches on the
-// verification context. It guarantees that the Fiat-Shamir coefficients and
-// commitment hash are derived at most once per context, even when multiple rows
-// are verified concurrently.
-func (context *VerificationContext) ensureRowRootCaches(rowRoot [32]byte, commitment Commitment) error {
-	var onceErr error
-	context.cacheOnce.Do(func() {
-		context.cachedRowRoot = rowRoot
-		context.coeffs = deriveCoefficients(rowRoot, context.config)
-
-		h := sha256.New()
-		h.Write(rowRoot[:])
-		h.Write(context.rlcOrigRoot[:])
-		var cached Commitment
-		copy(cached[:], h.Sum(nil))
-		context.cachedCommitment = cached
-		if cached != commitment {
-			onceErr = errors.New("commitment verification failed")
-		}
-	})
-
-	if onceErr != nil {
-		return onceErr
-	}
-	if context.cachedRowRoot != rowRoot {
-		return errors.New("row root mismatch in verification context")
-	}
-	if context.cachedCommitment != commitment {
-		return errors.New("commitment verification failed")
-	}
-	if context.coeffs == nil {
-		return errors.New("verification coefficients not initialized")
-	}
-
-	return nil
-}
-
 // VerifyRowWithContext verifies a row proof using pre-initialized context
 // Efficient for multiple verifications with same commitment
 func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *VerificationContext) error {
@@ -111,8 +74,26 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 
 	// 2. Initialize and reuse cached coefficients & commitment derived from the
 	// first reconstructed row root.
-	if err := context.ensureRowRootCaches(rowRoot, commitment); err != nil {
+	context.cacheOnce.Do(func() {
+		context.coeffs = deriveCoefficients(rowRoot, context.config)
+
+		h := sha256.New()
+		h.Write(rowRoot[:])
+		h.Write(context.rlcOrigRoot[:])
+		var cached Commitment
+		copy(cached[:], h.Sum(nil))
+		context.cachedCommitment = cached
+		if cached != commitment {
+			err = errors.New("commitment verification failed")
+		}
+	})
+
+	if err != nil {
 		return err
+	}
+
+	if context.cachedCommitment != commitment {
+		return errors.New("commitment verification failed")
 	}
 
 	// 3. Compute RLC with cached coefficients (no SHA-256 per symbol).
