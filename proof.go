@@ -76,13 +76,8 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 	// first reconstructed row root.
 	context.cacheOnce.Do(func() {
 		context.coeffs = deriveCoefficients(rowRoot, context.config)
-		context.cachedRowRoot = rowRoot
 
-		h := sha256.New()
-		h.Write(rowRoot[:])
-		h.Write(context.rlcOrigRoot[:])
-		var cached Commitment
-		copy(cached[:], h.Sum(nil))
+		cached := commitmentFromRowRoot(rowRoot, context.rlcOrigRoot)
 		context.cachedCommitment = cached
 		if cached != commitment {
 			err = errors.New("commitment verification failed")
@@ -97,8 +92,14 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return errors.New("commitment verification failed")
 	}
 
-	if context.cachedRowRoot != rowRoot {
-		return errors.New("row root mismatch with cached value")
+	current := commitmentFromRowRoot(rowRoot, context.rlcOrigRoot)
+
+	if current != commitment {
+		return errors.New("commitment verification failed")
+	}
+
+	if current != context.cachedCommitment {
+		return errors.New("row proof inconsistent with cached coefficients")
 	}
 
 	// 3. Compute RLC with cached coefficients (no SHA-256 per symbol).
@@ -184,6 +185,14 @@ func VerifyStandaloneProof(proof *StandaloneProof, commitment Commitment, config
 	}
 
 	return nil
+}
+
+func commitmentFromRowRoot(rowRoot [32]byte, rlcOrigRoot [32]byte) Commitment {
+	var input [64]byte
+	copy(input[:32], rowRoot[:])
+	copy(input[32:], rlcOrigRoot[:])
+	sum := sha256.Sum256(input[:])
+	return sum
 }
 
 // VerifyRowInclusionProof verifies that a row is included in the commitment.
