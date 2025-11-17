@@ -72,40 +72,13 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return fmt.Errorf("failed to compute row root: %w", err)
 	}
 
-	// 2. Initialize and reuse cached coefficients & commitment derived from the
-	// first reconstructed row root.
-	context.cacheOnce.Do(func() {
+	// 2. Derive coefficients once only and compute RLC for the row
+	context.coeffsOnce.Do(func() {
 		context.coeffs = deriveCoefficients(rowRoot, context.config)
-
-		cached := commitmentFromRowRoot(rowRoot, context.rlcOrigRoot)
-		context.cachedCommitment = cached
-		if cached != commitment {
-			err = errors.New("commitment verification failed")
-		}
 	})
-
-	if err != nil {
-		return err
-	}
-
-	if context.cachedCommitment != commitment {
-		return errors.New("commitment verification failed")
-	}
-
-	current := commitmentFromRowRoot(rowRoot, context.rlcOrigRoot)
-
-	if current != commitment {
-		return errors.New("commitment verification failed")
-	}
-
-	if current != context.cachedCommitment {
-		return errors.New("row proof inconsistent with cached coefficients")
-	}
-
-	// 3. Compute RLC with cached coefficients (no SHA-256 per symbol).
 	computedRLC := computeRLC(proof.Row, context.coeffs)
 
-	// 4. Verify RLC matches the extended value at this index
+	// 3. Verify RLC matches the extended value at this index
 	if proof.Index >= len(context.rlcExtended) {
 		return fmt.Errorf("index %d out of range", proof.Index)
 	}
@@ -115,8 +88,15 @@ func VerifyRowWithContext(proof *RowProof, commitment Commitment, context *Verif
 		return errors.New("computed RLC does not match expected value")
 	}
 
-	// 5. Commitment already verified & cached in the cacheOnce.Do block above. Nothing
-	// else to do here.
+	// 4. Verify commitment
+	h := sha256.New()
+	h.Write(rowRoot[:])
+	h.Write(context.rlcOrigRoot[:])
+	computedCommitment := h.Sum(nil)
+
+	if commitment != [32]byte(computedCommitment) {
+		return errors.New("commitment verification failed")
+	}
 
 	return nil
 }
@@ -185,14 +165,6 @@ func VerifyStandaloneProof(proof *StandaloneProof, commitment Commitment, config
 	}
 
 	return nil
-}
-
-func commitmentFromRowRoot(rowRoot [32]byte, rlcOrigRoot [32]byte) Commitment {
-	var input [64]byte
-	copy(input[:32], rowRoot[:])
-	copy(input[32:], rlcOrigRoot[:])
-	sum := sha256.Sum256(input[:])
-	return sum
 }
 
 // VerifyRowInclusionProof verifies that a row is included in the commitment.

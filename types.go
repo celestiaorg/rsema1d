@@ -31,9 +31,8 @@ type VerificationContext struct {
 	rlcExtended []field.GF128 // Extended K+N RLC values
 	rlcOrigRoot [32]byte      // Cached RLC root
 
-	cacheOnce        sync.Once
-	coeffs           []field.GF128
-	cachedCommitment Commitment
+	coeffsOnce sync.Once
+	coeffs     []field.GF128
 }
 
 // RowProof is a lightweight proof without RLC data
