@@ -16,6 +16,16 @@ type Config struct {
 	// Optional parameters with defaults
 	WorkerCount int // Number of parallel workers (minimum 1)
 
+	// Optional pre-allocated buffer for zero-allocation encoding (only for RowSize==64)
+	// If provided, must be at least (K+N)*64 bytes
+	// Used by CreateVerificationContext to avoid allocations in hot path
+	ShardBuffer []byte
+
+	// Optional pre-allocated buffer for RLC Merkle tree leaves
+	// If provided, must be at least kPadded*16 bytes where kPadded = nextPowerOfTwo(K)
+	// Used by CreateVerificationContext to avoid allocations when building RLC tree
+	RLCLeavesBuffer []byte
+
 	// Computed padding values (set during Validate)
 	kPadded     int // Next power of 2 >= K
 	totalPadded int // Next power of 2 >= (kPadded + N)

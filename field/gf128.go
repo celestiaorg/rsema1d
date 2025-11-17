@@ -28,13 +28,36 @@ func Mul128(scalar GF16, vec GF128) GF128 {
 	return result
 }
 
+// MulAdd128 performs fused multiply-add: result += scalar * vec
+// This is faster than separate Mul128 + Add128 as it avoids intermediate allocation
+// Unrolled for better performance (8 GF16 elements is fixed)
+func MulAdd128(result *GF128, scalar GF16, vec GF128) {
+	result[0] ^= Mul16(scalar, vec[0])
+	result[1] ^= Mul16(scalar, vec[1])
+	result[2] ^= Mul16(scalar, vec[2])
+	result[3] ^= Mul16(scalar, vec[3])
+	result[4] ^= Mul16(scalar, vec[4])
+	result[5] ^= Mul16(scalar, vec[5])
+	result[6] ^= Mul16(scalar, vec[6])
+	result[7] ^= Mul16(scalar, vec[7])
+}
+
 // ToBytes128 serializes a GF128 to 16 bytes (little-endian)
 func ToBytes128(g GF128) [16]byte {
 	var b [16]byte
-	for i := 0; i < 8; i++ {
-		binary.LittleEndian.PutUint16(b[i*2:], uint16(g[i]))
-	}
+	ToBytes128InPlace(g, b[:])
 	return b
+}
+
+// ToBytes128InPlace serializes a GF128 into a provided 16-byte buffer (little-endian)
+// Panics if the buffer is not exactly 16 bytes
+func ToBytes128InPlace(g GF128, buf []byte) {
+	if len(buf) != 16 {
+		panic("ToBytes128InPlace requires exactly 16-byte buffer")
+	}
+	for i := 0; i < 8; i++ {
+		binary.LittleEndian.PutUint16(buf[i*2:], uint16(g[i]))
+	}
 }
 
 // FromBytes128 deserializes 16 bytes to a GF128 (little-endian)

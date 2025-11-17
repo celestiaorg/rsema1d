@@ -58,11 +58,60 @@ func ExtendVertical(data [][]byte, n int) ([][]byte, error) {
 	return shards, nil
 }
 
+// extendVerticalInPlace performs RS extension using pre-allocated shards buffer
+// shards must already have k+n slices allocated, with first k containing data
+// This is a zero-allocation variant of ExtendVertical for the hot path
+func extendVerticalInPlace(shards [][]byte, k, n int) ([][]byte, error) {
+	if len(shards) != k+n {
+		return nil, fmt.Errorf("shards length %d doesn't match k+n=%d", len(shards), k+n)
+	}
+	if k == 0 {
+		return nil, fmt.Errorf("no data provided")
+	}
+	if n <= 0 {
+		return nil, fmt.Errorf("n must be positive, got %d", n)
+	}
+
+	// Check that all rows have the same size
+	rowSize := len(shards[0])
+	if rowSize == 0 || rowSize%64 != 0 {
+		return nil, fmt.Errorf("row size must be non-zero and multiple of 64, got %d", rowSize)
+	}
+	for i := 0; i < k+n; i++ {
+		if len(shards[i]) != rowSize {
+			return nil, fmt.Errorf("shard %d has size %d, expected %d", i, len(shards[i]), rowSize)
+		}
+	}
+
+	// Create Reed-Solomon encoder
+	enc, err := reedsolomon.New(k, n, reedsolomon.WithLeopardGF16(true))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create encoder: %w", err)
+	}
+
+	// Encode to generate parity shards (modifies shards[k:k+n] in place)
+	if err := enc.Encode(shards); err != nil {
+		return nil, fmt.Errorf("failed to encode: %w", err)
+	}
+
+	return shards, nil
+}
+
 // packGF128ToLeopard packs a GF128 value into a 64-byte Leopard-formatted shard
 // The GF128 consists of 8 GF16 symbols, placed as the first 8 symbols of the chunk
 // with the remaining 24 symbol positions zero-padded
 func packGF128ToLeopard(g field.GF128) []byte {
 	shard := make([]byte, 64)
+	packGF128ToLeopardInPlace(g, shard)
+	return shard
+}
+
+// packGF128ToLeopardInPlace packs a GF128 value into an existing 64-byte buffer
+// Buffer must be pre-zeroed or this function will zero the unused positions
+func packGF128ToLeopardInPlace(g field.GF128, shard []byte) {
+	if len(shard) != 64 {
+		panic("packGF128ToLeopardInPlace requires exactly 64-byte shard")
+	}
 
 	// Pack 8 GF16 symbols in Leopard interleaved format
 	// Symbols 0-7 from GF128, symbols 8-31 are zero
@@ -71,9 +120,7 @@ func packGF128ToLeopard(g field.GF128) []byte {
 		shard[i] = byte(symbol & 0xFF)  // Low byte at position i
 		shard[32+i] = byte(symbol >> 8) // High byte at position 32+i
 	}
-	// Positions 8-31 and 40-63 remain zero (24 zero symbols)
-
-	return shard
+	// Positions 8-31 and 40-63 should already be zero (caller's responsibility)
 }
 
 // unpackGF128FromLeopard extracts a GF128 value from a 64-byte Leopard-formatted shard
@@ -95,7 +142,9 @@ func unpackGF128FromLeopard(shard []byte) field.GF128 {
 }
 
 // ExtendRLCResults extends RLC results using Reed-Solomon
-func ExtendRLCResults(rlcOriginal []field.GF128, n int) ([]field.GF128, error) {
+// If shardBuffer is provided and large enough ((k+n)*64 bytes), it will be used
+// for zero-allocation operation. Otherwise, standard allocation is used.
+func ExtendRLCResults(rlcOriginal []field.GF128, n int, shardBuffer []byte) ([]field.GF128, error) {
 	k := len(rlcOriginal)
 	if k == 0 {
 		return nil, fmt.Errorf("no RLC values provided")
@@ -104,16 +153,42 @@ func ExtendRLCResults(rlcOriginal []field.GF128, n int) ([]field.GF128, error) {
 		return nil, fmt.Errorf("n must be positive, got %d", n)
 	}
 
-	// Convert GF128 values to Leopard-formatted shards
-	// Each GF128 (8 GF16 symbols) is packed into a 64-byte Leopard shard
-	// with 24 zero symbols for padding
-	shards := make([][]byte, k)
+	requiredBufferSize := (k + n) * 64
+	useProvidedBuffer := len(shardBuffer) >= requiredBufferSize
+
+	// Prepare shards slice
+	shards := make([][]byte, k+n)
+
+	if useProvidedBuffer {
+		// Zero-allocation path: slice the provided buffer
+		for i := 0; i < k+n; i++ {
+			shards[i] = shardBuffer[i*64 : (i+1)*64]
+			// Zero out the buffer
+			for j := range shards[i] {
+				shards[i][j] = 0
+			}
+		}
+	}
+
+	// Pack original GF128 values into shards
 	for i := 0; i < k; i++ {
-		shards[i] = packGF128ToLeopard(rlcOriginal[i])
+		if useProvidedBuffer {
+			packGF128ToLeopardInPlace(rlcOriginal[i], shards[i])
+		} else {
+			shards[i] = packGF128ToLeopard(rlcOriginal[i])
+		}
 	}
 
 	// Extend using vertical RS
-	extendedShards, err := ExtendVertical(shards, n)
+	var extendedShards [][]byte
+	var err error
+	if useProvidedBuffer {
+		// Zero-allocation: extend in-place (shards already has space for k+n)
+		extendedShards, err = extendVerticalInPlace(shards, k, n)
+	} else {
+		extendedShards, err = ExtendVertical(shards[:k], n)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to extend RLC results: %w", err)
 	}

@@ -25,18 +25,47 @@ func buildPaddedRowTree(extended [][]byte, config *Config) *merkle.Tree {
 
 // buildPaddedRLCTree creates a padded Merkle tree from RLC original values
 // Only stores K values padded to kPadded (not totalPadded like row tree)
+// If config.RLCLeavesBuffer is provided and large enough (kPadded*16 bytes),
+// it will be used for zero-allocation operation.
 func buildPaddedRLCTree(rlcOrig []field.GF128, config *Config) *merkle.Tree {
-	zeroRLC := make([]byte, 16) // Zero GF128 value
+	requiredBufferSize := config.kPadded * 16
+	useProvidedBuffer := len(config.RLCLeavesBuffer) >= requiredBufferSize
+
 	paddedRLCLeaves := make([][]byte, config.kPadded)
 
-	// Fill with K original RLC values
-	for i := 0; i < config.K; i++ {
-		bytes := field.ToBytes128(rlcOrig[i])
-		paddedRLCLeaves[i] = bytes[:]
-	}
-	// Pad to next power of 2
-	for i := config.K; i < config.kPadded; i++ {
-		paddedRLCLeaves[i] = zeroRLC
+	if useProvidedBuffer {
+		// Zero-allocation path: slice the provided buffer
+		buf := config.RLCLeavesBuffer[:requiredBufferSize]
+
+		// Zero out the entire buffer (for padding)
+		for i := range buf {
+			buf[i] = 0
+		}
+
+		// Slice buffer into 16-byte chunks and fill with K original RLC values
+		for i := 0; i < config.K; i++ {
+			chunk := buf[i*16 : (i+1)*16]
+			field.ToBytes128InPlace(rlcOrig[i], chunk)
+			paddedRLCLeaves[i] = chunk
+		}
+
+		// Point padding entries to zero-filled portions of buffer
+		for i := config.K; i < config.kPadded; i++ {
+			paddedRLCLeaves[i] = buf[i*16 : (i+1)*16]
+		}
+	} else {
+		// Standard allocation path
+		zeroRLC := make([]byte, 16) // Zero GF128 value
+
+		// Fill with K original RLC values
+		for i := 0; i < config.K; i++ {
+			bytes := field.ToBytes128(rlcOrig[i])
+			paddedRLCLeaves[i] = bytes[:]
+		}
+		// Pad to next power of 2
+		for i := config.K; i < config.kPadded; i++ {
+			paddedRLCLeaves[i] = zeroRLC
+		}
 	}
 
 	return merkle.NewTreeWithWorkers(paddedRLCLeaves, config.WorkerCount)

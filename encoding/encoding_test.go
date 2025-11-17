@@ -246,7 +246,7 @@ func TestExtendRLCResults(t *testing.T) {
 			}
 
 			// Extend RLC results
-			extended, err := ExtendRLCResults(rlcOrig, tt.n)
+			extended, err := ExtendRLCResults(rlcOrig, tt.n, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -482,7 +482,7 @@ func TestRLCPaddingConsistency(t *testing.T) {
 	}
 
 	// Extend RLC results
-	extended, err := ExtendRLCResults(rlcOrig, n)
+	extended, err := ExtendRLCResults(rlcOrig, n, nil)
 	if err != nil {
 		t.Fatalf("ExtendRLCResults() error: %v", err)
 	}

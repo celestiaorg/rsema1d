@@ -28,7 +28,8 @@ func CreateVerificationContext(rlcOrig []field.GF128, config *Config) (*Verifica
 	rlcOrigRoot := rlcOrigTree.Root()
 
 	// Extend RLC results to get all K+N values
-	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N)
+	// Pass ShardBuffer from config for zero-allocation (if provided)
+	rlcExtended, err := encoding.ExtendRLCResults(rlcOrig, config.N, config.ShardBuffer)
 	if err != nil {
 		return nil, [32]byte{}, fmt.Errorf("failed to extend RLC results: %w", err)
 	}

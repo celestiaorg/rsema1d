@@ -24,18 +24,31 @@ func deriveCoefficients(rowRoot [32]byte, config *Config) []field.GF128 {
 }
 
 // computeRLC computes random linear combination for a row (internal)
+// Optimized version that inlines symbol extraction and uses fused multiply-add
 func computeRLC(row []byte, coeffs []field.GF128) field.GF128 {
 	result := field.Zero()
 	numChunks := len(row) / chunkSize
 
 	for c := 0; c < numChunks; c++ {
-		chunk := row[c*chunkSize : (c+1)*chunkSize]
-		symbols := extractSymbols(chunk)
-		for j, sym := range symbols {
-			// result += symbol * coefficient
-			symbolIndex := c*32 + j // Overall symbol index in the row
-			product := field.Mul128(sym, coeffs[symbolIndex])
-			result = field.Add128(result, product)
+		chunkOffset := c * chunkSize
+		chunk := row[chunkOffset : chunkOffset+chunkSize]
+		baseSymbolIndex := c * 32
+
+		// Process 32 symbols per chunk (64 bytes = 32 GF16 symbols)
+		// Unroll by 4 to improve instruction-level parallelism and reduce loop overhead
+		for j := 0; j < 32; j += 4 {
+			// Extract and process 4 symbols at once
+			// This helps with CPU pipelining and reduces branch mispredictions
+			s0 := field.GF16(chunk[32+j+0])<<8 | field.GF16(chunk[j+0])
+			s1 := field.GF16(chunk[32+j+1])<<8 | field.GF16(chunk[j+1])
+			s2 := field.GF16(chunk[32+j+2])<<8 | field.GF16(chunk[j+2])
+			s3 := field.GF16(chunk[32+j+3])<<8 | field.GF16(chunk[j+3])
+
+			// Fused multiply-add for each symbol
+			field.MulAdd128(&result, s0, coeffs[baseSymbolIndex+j+0])
+			field.MulAdd128(&result, s1, coeffs[baseSymbolIndex+j+1])
+			field.MulAdd128(&result, s2, coeffs[baseSymbolIndex+j+2])
+			field.MulAdd128(&result, s3, coeffs[baseSymbolIndex+j+3])
 		}
 	}
 	return result
