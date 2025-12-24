@@ -78,3 +78,24 @@ func HashToGF128(data []byte) GF128 {
 	// XOR the two halves for final result
 	return Add128(firstHalf, secondHalf)
 }
+
+// PackToLeopard packs a GF128 value into a 64-byte Leopard-formatted buffer.
+// Leopard RS uses a specific interleaved format for GF16 elements.
+func PackToLeopard(g GF128, dst []byte) {
+	_ = dst[63] // bounds check
+	clear(dst)
+	for i := range 8 {
+		dst[i] = byte(g[i] & 0xFF)
+		dst[32+i] = byte(g[i] >> 8)
+	}
+}
+
+// UnpackFromLeopard extracts a GF128 value from a Leopard-formatted buffer.
+// reads 8 symbols from positions 0-7 (low bytes) and 32-39 (high bytes).
+func UnpackFromLeopard(src []byte) GF128 {
+	var g GF128
+	for i := range 8 {
+		g[i] = GF16(src[32+i])<<8 | GF16(src[i])
+	}
+	return g
+}

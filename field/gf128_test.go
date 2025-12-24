@@ -246,3 +246,42 @@ func TestGF128Properties(t *testing.T) {
 		t.Errorf("Scalar multiplication not distributive: %v != %v", left2, right2)
 	}
 }
+
+func TestPackUnpackLeopard(t *testing.T) {
+	tests := []GF128{
+		Zero(),
+		{1, 2, 3, 4, 5, 6, 7, 8},
+		{0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF},
+		{0x1234, 0x5678, 0x9ABC, 0xDEF0, 0x1111, 0x2222, 0x3333, 0x4444},
+	}
+
+	for i, original := range tests {
+		dst := make([]byte, 64)
+		PackToLeopard(original, dst)
+
+		// verify Leopard format: low bytes at 0-7, high bytes at 32-39
+		for j := 0; j < 8; j++ {
+			expectedLow := byte(original[j] & 0xFF)
+			expectedHigh := byte(original[j] >> 8)
+			if dst[j] != expectedLow {
+				t.Errorf("test %d: symbol %d low byte = %02x, want %02x", i, j, dst[j], expectedLow)
+			}
+			if dst[32+j] != expectedHigh {
+				t.Errorf("test %d: symbol %d high byte = %02x, want %02x", i, j, dst[32+j], expectedHigh)
+			}
+		}
+
+		// verify padding is zero
+		for j := 8; j < 32; j++ {
+			if dst[j] != 0 || dst[32+j] != 0 {
+				t.Errorf("test %d: padding at position %d is not zero", i, j)
+			}
+		}
+
+		// verify round-trip
+		unpacked := UnpackFromLeopard(dst)
+		if !Equal128(unpacked, original) {
+			t.Errorf("test %d: round-trip failed, got %v, want %v", i, unpacked, original)
+		}
+	}
+}
