@@ -7,7 +7,8 @@ import (
 
 // buildPaddedRowTree creates a padded Merkle tree from extended rows
 func buildPaddedRowTree(extended [][]byte, config *Config) *merkle.Tree {
-	zeroRow := make([]byte, config.RowSize)
+	rowSize := len(extended[0])
+	zeroRow := make([]byte, rowSize)
 	paddedRows := make([][]byte, config.totalPadded)
 
 	// Fill padded array: [original | padding | extended | padding]
